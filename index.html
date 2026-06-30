@@ -258,6 +258,38 @@
         gap: 8px;
       }
 
+      .auth-panel {
+        display: grid;
+        gap: 10px;
+      }
+
+      .auth-state {
+        display: grid;
+        gap: 4px;
+        padding: 10px;
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+
+      .auth-state strong {
+        font-size: 14px;
+      }
+
+      .member-badge {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        min-height: 24px;
+        padding: 3px 8px;
+        color: #0f5d2a;
+        background: #dcfce7;
+        border: 1px solid #b7ebc5;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 780;
+      }
+
       .map-shell {
         position: relative;
         min-width: 0;
@@ -1156,6 +1188,32 @@
         <input id="tideStation" type="hidden" value="8516945" />
         <p id="tideStationInfo" hidden>会根据钓点自动匹配附近 NOAA 潮汐站。</p>
 
+        <section class="group auth-panel">
+          <h2>会员账号</h2>
+          <div class="auth-state" id="authState">
+            <strong>未登录</strong>
+            <span class="hint">登录后钓点、鱼情动态和鱼照识别会归到你的账号。</span>
+          </div>
+          <div class="field">
+            <label for="authEmail">邮箱</label>
+            <input id="authEmail" autocomplete="email" inputmode="email" placeholder="you@example.com" />
+          </div>
+          <div class="field">
+            <label for="authPassword">密码</label>
+            <input id="authPassword" autocomplete="current-password" placeholder="至少 6 位" type="password" />
+          </div>
+          <div class="field">
+            <label for="authNickname">注册昵称</label>
+            <input id="authNickname" autocomplete="nickname" placeholder="例如：长岛阿强" />
+          </div>
+          <div class="actions">
+            <button id="loginAccount" type="button">登录</button>
+            <button id="registerAccount" class="secondary" type="button">注册</button>
+            <button id="logoutAccount" class="secondary" type="button">退出</button>
+          </div>
+          <p class="hint">当前会员为免费账号；后续可加深度关注、订阅分成和创作者后台。</p>
+        </section>
+
         <section class="group">
           <h2>用户与群分享</h2>
           <div class="field">
@@ -1490,6 +1548,13 @@
         clearKeys: document.querySelector("#clearKeys"),
         copyCoords: document.querySelector("#copyCoords"),
         nickname: document.querySelector("#nickname"),
+        authState: document.querySelector("#authState"),
+        authEmail: document.querySelector("#authEmail"),
+        authPassword: document.querySelector("#authPassword"),
+        authNickname: document.querySelector("#authNickname"),
+        loginAccount: document.querySelector("#loginAccount"),
+        registerAccount: document.querySelector("#registerAccount"),
+        logoutAccount: document.querySelector("#logoutAccount"),
         saveProfile: document.querySelector("#saveProfile"),
         copyShareLink: document.querySelector("#copyShareLink"),
         resetCommunity: document.querySelector("#resetCommunity"),
@@ -1609,6 +1674,7 @@
       let selectedSpotId = null;
       let spots = [];
       let userProfile = { nickname: "我" };
+      let currentUser = null;
       let friends = [];
       let friendShares = [];
       let windParticleFrame = null;
@@ -1770,7 +1836,9 @@
       renderSpots();
       renderFriends();
       renderFishFeed();
+      renderAuthState();
       loadBackendFeed();
+      loadAccountSession();
 
       function restoreSavedState() {
         els.mapKey.value = localStorage.getItem("weatherapi_key") || "";
@@ -1786,6 +1854,32 @@
         } catch {
           return { nickname: "我" };
         }
+      }
+
+      function membershipLabel(value) {
+        if (value === "creator") return "创作者";
+        if (value === "pro") return "高级会员";
+        return "免费会员";
+      }
+
+      function renderAuthState() {
+        if (!currentUser) {
+          els.authState.innerHTML = `
+            <strong>未登录</strong>
+            <span class="hint">登录后钓点、鱼情动态和鱼照识别会归到你的账号。</span>`;
+          els.logoutAccount.disabled = true;
+          els.saveProfile.textContent = "保存昵称";
+          return;
+        }
+        els.authState.innerHTML = `
+          <strong>${escapeHtml(currentUser.nickname || "钓友")}</strong>
+          <span class="hint">${escapeHtml(currentUser.email || "")}</span>
+          <span class="member-badge">${escapeHtml(membershipLabel(currentUser.membership))}</span>`;
+        els.nickname.value = currentUser.nickname || userProfile.nickname || "我";
+        els.authNickname.value = currentUser.nickname || "";
+        els.authEmail.value = currentUser.email || els.authEmail.value;
+        els.logoutAccount.disabled = false;
+        els.saveProfile.textContent = "更新昵称";
       }
 
       function loadFriends() {
@@ -3950,6 +4044,7 @@
         try {
           const response = await fetch(path, {
             method: options.method || "GET",
+            credentials: "same-origin",
             headers: { "Content-Type": "application/json", ...(options.headers || {}) },
             body: options.body ? JSON.stringify(options.body) : undefined,
           });
@@ -3958,6 +4053,19 @@
         } catch {
           return null;
         }
+      }
+
+      async function authRequest(path, options = {}) {
+        if (location.protocol === "file:") throw new Error("账号功能需要通过网站地址打开。");
+        const response = await fetch(path, {
+          method: options.method || "GET",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+          body: options.body ? JSON.stringify(options.body) : undefined,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || `请求失败 ${response.status}`);
+        return data;
       }
 
       async function postFeed(type, title, text, extra = {}) {
@@ -4260,7 +4368,7 @@
         setStatus("心得已发布到该钓点主页。", "good");
       }
 
-      function saveProfile() {
+      async function saveProfile() {
         const nickname = els.nickname.value.trim() || "我";
         const oldName = userProfile.nickname;
         userProfile = { nickname };
@@ -4268,8 +4376,68 @@
         spots = spots.map((spot) => (spot.owner === oldName ? { ...spot, owner: nickname } : spot));
         persistSpots();
         renderSpots();
-        apiRequest("/api/session", { method: "POST", body: { nickname } });
+        if (currentUser) {
+          const result = await apiRequest("/api/session", { method: "PATCH", body: { nickname } });
+          if (result?.user) applyAuthenticatedUser(result.user);
+        }
         setStatus(`昵称已保存：${nickname}`, "good");
+      }
+
+      function applyAuthenticatedUser(user) {
+        currentUser = user || null;
+        if (user) {
+          const oldName = userProfile.nickname;
+          userProfile = { nickname: user.nickname || "钓友" };
+          localStorage.setItem("fishing_user_profile_v1", JSON.stringify(userProfile));
+          spots = spots.map((spot) => (spot.owner === oldName || spot.owner === "我" ? { ...spot, owner: userProfile.nickname } : spot));
+          persistSpots();
+          renderSpots();
+        }
+        renderAuthState();
+      }
+
+      async function loadAccountSession() {
+        const result = await apiRequest("/api/session");
+        if (result?.user) {
+          applyAuthenticatedUser(result.user);
+          setStatus(`已恢复登录：${result.user.nickname}`, "good");
+        } else {
+          renderAuthState();
+        }
+      }
+
+      async function registerAccount() {
+        const email = els.authEmail.value.trim();
+        const password = els.authPassword.value;
+        const nickname = els.authNickname.value.trim() || els.nickname.value.trim() || "钓友";
+        try {
+          const result = await authRequest("/api/auth/register", { method: "POST", body: { email, password, nickname } });
+          applyAuthenticatedUser(result.user);
+          els.authPassword.value = "";
+          setStatus(`注册成功，已登录：${result.user.nickname}`, "good");
+        } catch (error) {
+          setStatus(error.message, "warning");
+        }
+      }
+
+      async function loginAccount() {
+        const email = els.authEmail.value.trim();
+        const password = els.authPassword.value;
+        try {
+          const result = await authRequest("/api/auth/login", { method: "POST", body: { email, password } });
+          applyAuthenticatedUser(result.user);
+          els.authPassword.value = "";
+          setStatus(`已登录：${result.user.nickname}`, "good");
+        } catch (error) {
+          setStatus(error.message, "warning");
+        }
+      }
+
+      async function logoutAccount() {
+        await apiRequest("/api/auth/logout", { method: "POST", body: {} });
+        currentUser = null;
+        renderAuthState();
+        setStatus("已退出账号。本机仍保留本地草稿。", "good");
       }
 
       async function copyShareLink() {
@@ -4624,6 +4792,9 @@
         autoLoadMapAndForecast(250);
       });
       els.zoom.addEventListener("change", () => autoLoadMapAndForecast(250));
+      els.loginAccount.addEventListener("click", loginAccount);
+      els.registerAccount.addEventListener("click", registerAccount);
+      els.logoutAccount.addEventListener("click", logoutAccount);
       els.saveProfile.addEventListener("click", saveProfile);
       els.copyShareLink.addEventListener("click", copyShareLink);
       els.resetCommunity.addEventListener("click", resetCommunity);
