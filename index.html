@@ -1,0 +1,4686 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>1490钓鱼天气与潮汐预测系统</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.4.0/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.4.0/dist/leaflet.js"></script>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #17212f;
+        --muted: #607086;
+        --line: #d8e0e8;
+        --panel: #ffffff;
+        --soft: #f5f8fb;
+        --sea: #0f6f82;
+        --accent: #e86d2f;
+        --good: #15803d;
+        --warn: #b45309;
+        --bad: #b91c1c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        background: #eef3f6;
+      }
+
+      body {
+        overflow: hidden;
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 372px minmax(540px, 1fr) 420px;
+        width: 100%;
+        height: 100%;
+      }
+
+      .sidebar,
+      .dashboard {
+        z-index: 10;
+        min-width: 0;
+        background: var(--panel);
+        overflow: auto;
+      }
+
+      .sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding: 18px;
+        border-right: 1px solid var(--line);
+      }
+
+      .dashboard {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        padding: 18px;
+        border-left: 1px solid var(--line);
+      }
+
+      .brand {
+        display: grid;
+        gap: 7px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 23px;
+        line-height: 1.18;
+        font-weight: 780;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        font-size: 16px;
+        line-height: 1.25;
+      }
+
+      h3 {
+        font-size: 14px;
+        line-height: 1.25;
+      }
+
+      .subtitle,
+      .hint,
+      .status,
+      .small {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .group {
+        display: grid;
+        gap: 12px;
+        padding: 14px;
+        background: var(--soft);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+
+      .field {
+        position: relative;
+        display: grid;
+        gap: 7px;
+      }
+
+      .suggestions {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        z-index: 30;
+        display: none;
+        max-height: 260px;
+        overflow-y: auto;
+        padding: 6px;
+        background: #ffffff;
+        border: 1px solid #cbd8e5;
+        border-radius: 8px;
+        box-shadow: 0 14px 34px rgba(22, 34, 51, 0.16);
+      }
+
+      .suggestions.open {
+        display: grid;
+        gap: 5px;
+      }
+
+      .suggestion-item {
+        display: grid;
+        gap: 2px;
+        width: 100%;
+        min-height: 46px;
+        padding: 7px 9px;
+        color: var(--ink);
+        background: #fbfdff;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .suggestion-item:hover,
+      .suggestion-item:focus {
+        background: #edf8fb;
+        border-color: #b9dde5;
+        outline: 0;
+      }
+
+      .suggestion-main {
+        font-size: 13px;
+        font-weight: 820;
+      }
+
+      .suggestion-meta {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 650;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      label,
+      .label {
+        color: #344458;
+        font-size: 12px;
+        font-weight: 720;
+      }
+
+      input,
+      select,
+      button {
+        width: 100%;
+        min-height: 40px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+
+      input,
+      select {
+        padding: 0 11px;
+        color: var(--ink);
+        background: #fbfdff;
+      }
+
+      input:focus,
+      select:focus,
+      button:focus {
+        outline: 3px solid rgba(15, 111, 130, 0.2);
+        outline-offset: 1px;
+      }
+
+      button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 0 12px;
+        color: #ffffff;
+        background: var(--sea);
+        border-color: var(--sea);
+        cursor: pointer;
+        font-weight: 740;
+      }
+
+      button.secondary {
+        color: #233147;
+        background: #ffffff;
+        border-color: #cbd6e2;
+      }
+
+      button.danger {
+        color: #ffffff;
+        background: #9f2f1f;
+        border-color: #9f2f1f;
+      }
+
+      button:disabled {
+        color: #8b98a7;
+        background: #edf1f5;
+        border-color: #d8e0e8;
+        cursor: not-allowed;
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 8px;
+      }
+
+      .map-shell {
+        position: relative;
+        min-width: 0;
+        height: 100%;
+        background: #9ccad1;
+      }
+
+      #mapCanvas {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+
+      .wind-particles {
+        position: absolute;
+        inset: 0;
+        z-index: 430;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        mix-blend-mode: normal;
+      }
+
+      .map-tip {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        z-index: 450;
+        max-width: min(520px, calc(100% - 32px));
+        padding: 11px 13px;
+        color: #223045;
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid rgba(201, 212, 225, 0.9);
+        border-radius: 8px;
+        box-shadow: 0 12px 30px rgba(26, 46, 75, 0.14);
+        font-size: 13px;
+        line-height: 1.45;
+        backdrop-filter: blur(10px);
+      }
+
+      .map-score-chart {
+        display: grid;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .map-score-controls {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        align-items: center;
+      }
+
+      .map-score-controls button {
+        min-height: 32px;
+        padding: 0 9px;
+        font-size: 12px;
+      }
+
+      .map-score-controls input {
+        min-height: 32px;
+        font-size: 12px;
+      }
+
+      .map-score-controls input {
+        grid-column: 1 / -1;
+      }
+
+      .map-score-chart canvas {
+        width: 100%;
+        height: 152px;
+        cursor: grab;
+        touch-action: none;
+        user-select: none;
+      }
+
+      .map-score-chart canvas.dragging {
+        cursor: grabbing;
+      }
+
+      .map-score-detail {
+        display: grid;
+        align-content: start;
+        gap: 8px;
+        min-width: 0;
+        padding-top: 8px;
+        border-top: 1px solid var(--line);
+      }
+
+      .hourly-advice-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .fallback-map {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        cursor: crosshair;
+        background:
+          radial-gradient(circle at 78% 22%, rgba(94, 186, 196, 0.55), transparent 18%),
+          radial-gradient(circle at 18% 82%, rgba(36, 130, 153, 0.38), transparent 20%),
+          linear-gradient(135deg, #d8ebed 0 18%, #7fc1c9 18% 19%, #3b9cae 19% 100%);
+      }
+
+      .water-grid {
+        position: absolute;
+        inset: 0;
+        opacity: 0.42;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.45) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.45) 1px, transparent 1px);
+        background-size: 72px 72px;
+      }
+
+      .shoreline {
+        position: absolute;
+        background: #c9d9c1;
+        border: 1px solid rgba(79, 102, 83, 0.22);
+        box-shadow: 0 18px 45px rgba(36, 71, 67, 0.18);
+      }
+
+      .shoreline.north {
+        top: -120px;
+        right: -80px;
+        width: 58%;
+        height: 260px;
+        transform: rotate(-9deg);
+        border-radius: 0 0 44% 38%;
+      }
+
+      .shoreline.west {
+        bottom: -110px;
+        left: -130px;
+        width: 48%;
+        height: 320px;
+        transform: rotate(14deg);
+        border-radius: 42% 55% 0 0;
+      }
+
+      .current-line {
+        position: absolute;
+        width: 58%;
+        height: 2px;
+        background: rgba(255, 255, 255, 0.72);
+        box-shadow: 0 0 18px rgba(255, 255, 255, 0.65);
+        transform-origin: left center;
+      }
+
+      .current-a {
+        top: 38%;
+        left: 31%;
+        transform: rotate(-17deg);
+      }
+
+      .current-b {
+        top: 62%;
+        left: 23%;
+        transform: rotate(-17deg);
+        opacity: 0.68;
+      }
+
+      .fallback-pin,
+      .crosshair {
+        width: 30px;
+        height: 30px;
+        pointer-events: none;
+      }
+
+      .fallback-pin {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+      }
+
+      .crosshair {
+        position: relative;
+        margin-left: -15px;
+        margin-top: -15px;
+      }
+
+      .fallback-pin::before,
+      .fallback-pin::after,
+      .crosshair::before,
+      .crosshair::after {
+        position: absolute;
+        content: "";
+        background: var(--accent);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.95);
+      }
+
+      .fallback-pin::before,
+      .crosshair::before {
+        top: 14px;
+        left: 0;
+        width: 30px;
+        height: 2px;
+      }
+
+      .fallback-pin::after,
+      .crosshair::after {
+        top: 0;
+        left: 14px;
+        width: 2px;
+        height: 30px;
+      }
+
+      .fallback-label {
+        position: absolute;
+        z-index: 1;
+        padding: 5px 8px;
+        color: rgba(24, 33, 47, 0.78);
+        background: rgba(255, 255, 255, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.62);
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 720;
+      }
+
+      .label-nw {
+        top: 24%;
+        left: 18%;
+      }
+
+      .label-se {
+        right: 12%;
+        bottom: 20%;
+      }
+
+      .map-ready .fallback-map {
+        display: none;
+      }
+
+      .readout {
+        display: grid;
+        gap: 11px;
+      }
+
+      .coord-grid,
+      .metric-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 9px;
+      }
+
+      .metric-grid.three {
+        grid-template-columns: 1fr 1fr 1fr;
+      }
+
+      .metric-grid.four {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .coord,
+      .metric {
+        min-width: 0;
+        padding: 11px;
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+
+      .coord span,
+      .metric span {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 720;
+      }
+
+      .coord strong,
+      .metric strong {
+        display: block;
+        margin-top: 5px;
+        overflow-wrap: anywhere;
+        font-size: 17px;
+        line-height: 1.2;
+      }
+
+      .status.warning {
+        color: var(--warn);
+      }
+
+      .status.good {
+        color: var(--good);
+      }
+
+      .admin-settings {
+        display: grid;
+        gap: 9px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .admin-settings summary {
+        cursor: pointer;
+        color: #41546c;
+        font-weight: 780;
+      }
+
+      .admin-settings[open] {
+        padding-top: 8px;
+        border-top: 1px solid var(--line);
+      }
+
+      .score-card {
+        display: grid;
+        grid-template-columns: 96px minmax(0, 1fr);
+        gap: 14px;
+        align-items: center;
+        padding: 14px;
+        background: #f8fbfd;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+
+      .score-ring {
+        display: grid;
+        place-items: center;
+        width: 96px;
+        height: 96px;
+        border-radius: 50%;
+        background: conic-gradient(var(--sea) 0deg, var(--sea) 230deg, #dde6ee 230deg);
+      }
+
+      .score-ring strong {
+        display: grid;
+        place-items: center;
+        width: 76px;
+        height: 76px;
+        border-radius: 50%;
+        background: #ffffff;
+        font-size: 29px;
+      }
+
+      .score-label {
+        margin: 0 0 4px;
+        color: #607086;
+        font-size: 12px;
+        font-weight: 820;
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 26px;
+        padding: 0 9px;
+        color: #2e3b4f;
+        background: #edf3f7;
+        border: 1px solid #d7e2ea;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 720;
+      }
+
+      .pill.good {
+        color: #166534;
+        background: #e8f6ed;
+        border-color: #bfe6ca;
+      }
+
+      .pill.warn {
+        color: #92400e;
+        background: #fff4df;
+        border-color: #f5d99c;
+      }
+
+      .pill.bad {
+        color: #991b1b;
+        background: #feeceb;
+        border-color: #f4c4c1;
+      }
+
+      .chart-card,
+      .list-card {
+        display: grid;
+        gap: 10px;
+        padding: 13px;
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+
+      .chart-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .chart-head button {
+        width: auto;
+        min-height: 32px;
+        padding: 0 10px;
+        font-size: 12px;
+      }
+
+      canvas {
+        width: 100%;
+        height: 190px;
+      }
+
+      .tide-canvas {
+        height: 180px;
+      }
+
+      .tide-wind-title {
+        margin: 2px 0 0;
+        color: #314158;
+        font-size: 13px;
+        font-weight: 820;
+      }
+
+      .table {
+        display: grid;
+        gap: 6px;
+      }
+
+      .table-row {
+        display: grid;
+        grid-template-columns: 70px 1fr 64px 64px;
+        gap: 8px;
+        align-items: center;
+        padding: 7px 0;
+        border-bottom: 1px solid #edf1f5;
+        font-size: 12px;
+      }
+
+      .table-row:last-child {
+        border-bottom: 0;
+      }
+
+      .table-row.header {
+        color: var(--muted);
+        font-weight: 760;
+      }
+
+      .hourly-wind-board {
+        overflow-x: auto;
+        padding-bottom: 4px;
+      }
+
+      .hourly-wind-grid {
+        position: relative;
+        display: grid;
+        min-width: 960px;
+        border: 1px solid #e1e8ef;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #ffffff;
+      }
+
+      .hourly-now-line {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        z-index: 4;
+        width: 0;
+        border-left: 2px dashed rgba(232, 109, 47, 0.9);
+        pointer-events: none;
+      }
+
+      .hourly-now-line::before {
+        content: "现在";
+        position: absolute;
+        top: 4px;
+        left: 5px;
+        padding: 1px 5px;
+        color: #9a3412;
+        background: rgba(255, 247, 237, 0.94);
+        border: 1px solid rgba(232, 109, 47, 0.42);
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 820;
+        white-space: nowrap;
+      }
+
+      .hourly-wind-label,
+      .hourly-wind-cell {
+        min-height: 34px;
+        display: grid;
+        place-items: center;
+        border-right: 1px solid rgba(226, 233, 240, 0.82);
+        border-bottom: 1px solid rgba(226, 233, 240, 0.82);
+        font-size: 12px;
+      }
+
+      .hourly-wind-label {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        justify-items: start;
+        padding-left: 10px;
+        color: #607086;
+        background: #f8fafc;
+        font-weight: 780;
+      }
+
+      .hourly-wind-cell {
+        position: relative;
+        color: #102033;
+        font-weight: 760;
+      }
+
+      .hourly-wind-cell.date {
+        min-height: 30px;
+        justify-content: start;
+        padding-left: 14px;
+        color: #405067;
+        background: #f5f7fb;
+        font-size: 14px;
+        font-weight: 830;
+      }
+
+      .hourly-wind-cell.selected {
+        outline: 2px solid rgba(232, 109, 47, 0.78);
+        outline-offset: -2px;
+        z-index: 1;
+      }
+
+      .hourly-wind-cell.speed {
+        color: #071527;
+        text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+      }
+
+      .hourly-wind-cell.gust {
+        color: #071527;
+        text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+      }
+
+      .hourly-wind-cell.dir {
+        background: #f1f5fb;
+      }
+
+      .hourly-wind-cell.icon {
+        min-height: 42px;
+        background: linear-gradient(180deg, #eef7ff 0%, #fff7f7 100%);
+        font-size: 23px;
+      }
+
+      .hourly-wind-cell.temp {
+        min-height: 34px;
+        background: linear-gradient(180deg, #fff5f2 0%, #fff 100%);
+        font-size: 16px;
+        font-weight: 860;
+      }
+
+      .hourly-wind-cell.rain {
+        color: #255a7a;
+        background: #f6fbff;
+        font-size: 13px;
+      }
+
+      .wind-arrow {
+        display: inline-grid;
+        width: 24px;
+        height: 24px;
+        place-items: center;
+        color: #335f84;
+        font-size: 22px;
+        line-height: 1;
+        transform-origin: 50% 50%;
+      }
+
+      .hourly-wind-cell.time {
+        grid-auto-flow: row;
+        gap: 1px;
+        color: #314158;
+        background: #ffffff;
+        font-weight: 760;
+      }
+
+      .hourly-wind-cell.time small {
+        color: #7a8798;
+        font-size: 10px;
+        font-weight: 700;
+      }
+
+      .golden-list {
+        display: grid;
+        gap: 7px;
+      }
+
+      .golden-item {
+        display: grid;
+        grid-template-columns: 82px 1fr;
+        gap: 8px;
+        padding: 9px;
+        background: #fbfdff;
+        border: 1px solid #e1e8ef;
+        border-radius: 8px;
+        font-size: 12px;
+      }
+
+      .source-note {
+        padding-top: 3px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: none;
+        padding: 24px;
+        background: rgba(12, 21, 33, 0.62);
+      }
+
+      .modal-backdrop.open {
+        display: grid;
+        place-items: center;
+      }
+
+      .tide-modal {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        gap: 12px;
+        width: min(1180px, 96vw);
+        height: min(760px, 90vh);
+        padding: 16px;
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: 0 30px 90px rgba(0, 0, 0, 0.28);
+      }
+
+      .tide-canvas-wrap {
+        min-width: 0;
+        min-height: 0;
+        overflow: auto;
+      }
+
+      .modal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .modal-head button {
+        width: auto;
+        min-height: 34px;
+        padding: 0 12px;
+      }
+
+      .tide-modal canvas {
+        width: 100%;
+        height: 100%;
+        min-height: 420px;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 86px;
+        padding: 10px 11px;
+        color: var(--ink);
+        background: #fbfdff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        font: inherit;
+        resize: vertical;
+      }
+
+      textarea:focus {
+        outline: 3px solid rgba(15, 111, 130, 0.2);
+        outline-offset: 1px;
+      }
+
+      .spot-grid {
+        display: grid;
+        gap: 10px;
+      }
+
+      .spot-card {
+        display: grid;
+        gap: 9px;
+        padding: 12px;
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+
+      .spot-card.active {
+        border-color: rgba(15, 111, 130, 0.7);
+        box-shadow: 0 0 0 3px rgba(15, 111, 130, 0.12);
+      }
+
+      .spot-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .spot-head strong {
+        display: block;
+        font-size: 15px;
+      }
+
+      .spot-meta {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .spot-actions {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 7px;
+      }
+
+      .spot-actions button {
+        min-height: 34px;
+        padding: 0 8px;
+        font-size: 12px;
+      }
+
+      .spot-actions button[data-locked="true"] {
+        opacity: 0.55;
+      }
+
+      .feed-item {
+        display: grid;
+        gap: 6px;
+        padding: 11px;
+        background: #fbfdff;
+        border: 1px solid #e1e8ef;
+        border-radius: 8px;
+      }
+
+      .feed-item.locked {
+        background: #fff8ec;
+        border-color: #f1d39a;
+      }
+
+      .creator-card {
+        display: grid;
+        gap: 10px;
+        padding: 13px;
+        background: #f8fbfd;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+
+      .policy-list {
+        display: grid;
+        gap: 8px;
+        padding-left: 18px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      @media (max-width: 1180px) {
+        body {
+          overflow: auto;
+        }
+
+        .app {
+          grid-template-columns: 360px minmax(0, 1fr);
+          grid-template-rows: minmax(560px, 65vh) auto;
+          height: auto;
+          min-height: 100%;
+        }
+
+        .dashboard {
+          grid-column: 1 / -1;
+          border-left: 0;
+          border-top: 1px solid var(--line);
+        }
+      }
+
+      @media (max-width: 760px) {
+        .app {
+          grid-template-columns: 1fr;
+          grid-template-rows: auto minmax(520px, 60vh) auto;
+        }
+
+        .sidebar {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        .row,
+        .actions,
+        .coord-grid,
+        .metric-grid,
+        .metric-grid.three,
+        .metric-grid.four,
+        .score-card {
+          grid-template-columns: 1fr;
+        }
+
+        .map-score-detail {
+          border-top: 1px solid var(--line);
+          padding-top: 10px;
+        }
+
+        .map-score-controls {
+          grid-template-columns: 1fr 1fr 1fr;
+        }
+
+        .map-score-controls input,
+        .map-score-controls button:last-child {
+          grid-column: 1 / -1;
+        }
+
+        .modal-backdrop {
+          padding: 10px;
+        }
+
+        .tide-modal {
+          width: calc(100vw - 20px);
+          height: calc(100vh - 20px);
+          padding: 10px;
+        }
+
+        .modal-head {
+          align-items: flex-start;
+        }
+
+        .modal-head .hint {
+          display: none;
+        }
+
+        .tide-canvas-wrap {
+          -webkit-overflow-scrolling: touch;
+        }
+
+        .tide-modal canvas {
+          width: 980px;
+          height: 520px;
+          min-height: 520px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <aside class="sidebar" aria-label="控制面板">
+        <section class="brand">
+          <h1>1490钓鱼天气与潮汐预测系统</h1>
+          <p class="subtitle">OpenStreetMap 地图取点、Open-Meteo 天气海况、NOAA 潮汐和爆护指数。</p>
+        </section>
+
+        <section class="group">
+          <h2>预报更新</h2>
+          <div class="actions">
+            <button id="fetchForecast" type="button">更新预报</button>
+          </div>
+          <div id="status" class="status">等待载入。</div>
+          <details class="admin-settings">
+            <summary>后台数据设置</summary>
+            <div class="field">
+              <label for="mapKey">WeatherAPI 备用 Key（后端代理）</label>
+              <input id="mapKey" autocomplete="off" placeholder="正式版放后端，不在前端直连" type="password" />
+            </div>
+            <div class="field">
+              <label for="pointKey">Stormglass 高级海洋 Key（后端代理）</label>
+              <input id="pointKey" autocomplete="off" placeholder="正式版放后端，不在前端直连" type="password" />
+            </div>
+            <div class="actions">
+              <button id="loadMap" class="secondary" type="button">重载地图</button>
+              <button id="clearKeys" class="secondary" type="button">清除密钥</button>
+            </div>
+            <p class="hint">默认不需要 key：地图用 OpenStreetMap，天气和海况用 Open-Meteo，潮汐用 NOAA。商业 key 正式版通过后端代理调用。</p>
+          </details>
+        </section>
+
+        <section class="group">
+          <h2>钓点</h2>
+          <div class="field">
+            <label for="coordinateInput">坐标</label>
+            <input id="coordinateInput" inputmode="decimal" value="40.908, -73.454" />
+            <input id="startLat" type="hidden" value="40.908" />
+            <input id="startLon" type="hidden" value="-73.454" />
+            <input id="zoom" type="hidden" value="10" />
+          </div>
+          <div class="readout">
+            <button id="copyCoords" class="secondary" type="button">复制坐标</button>
+          </div>
+        </section>
+
+        <input id="tideStation" type="hidden" value="8516945" />
+        <p id="tideStationInfo" hidden>会根据钓点自动匹配附近 NOAA 潮汐站。</p>
+
+        <section class="group">
+          <h2>用户与群分享</h2>
+          <div class="field">
+            <label for="nickname">用户昵称</label>
+            <input id="nickname" placeholder="例如：长岛阿强" />
+          </div>
+          <div class="actions">
+            <button id="saveProfile" type="button">保存昵称</button>
+            <button id="copyShareLink" class="secondary" type="button">复制群链接</button>
+            <button id="resetCommunity" class="secondary" type="button">重置社区</button>
+          </div>
+          <div class="field">
+            <label for="friendName">添加好友</label>
+            <input id="friendName" placeholder="输入好友昵称，例如：小陈" />
+          </div>
+          <div class="actions">
+            <button id="addFriend" class="secondary" type="button">添加好友</button>
+            <button id="shareFishingNow" type="button">分享我在这里钓鱼</button>
+          </div>
+          <div class="field">
+            <label for="friendSelect">选择好友</label>
+            <select id="friendSelect"></select>
+          </div>
+          <div class="golden-list" id="friendShareList"></div>
+          <button id="importPublicSpots" class="secondary" type="button">导入公开钓点</button>
+          <p class="hint">好友分享当前为本地原型，会复制分享卡片。正式版可接站内消息、短信或微信群邀请卡。</p>
+        </section>
+
+        <section class="group">
+          <h2>我的钓点</h2>
+          <div class="field">
+            <label for="spotName">钓点名称</label>
+            <input id="spotName" placeholder="例如：Lloyd Harbor 北岸石堤" />
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="spotVisibility">分享权限</label>
+              <select id="spotVisibility">
+                <option value="private">私人财产</option>
+                <option value="followers">仅关注者</option>
+                <option value="public">公开钓点</option>
+                <option value="paid">深度关注者</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="targetFish">目标鱼</label>
+              <input id="targetFish" autocomplete="off" placeholder="输入 s 试试：Striped bass..." />
+              <div id="fishSuggestions" class="suggestions" role="listbox" aria-label="目标鱼建议"></div>
+            </div>
+          </div>
+          <div class="field">
+            <label>最佳窗口</label>
+            <div class="row">
+              <div class="field">
+                <label for="bestTidePhase">潮汐阶段</label>
+                <select id="bestTidePhase">
+                  <option value="涨潮">涨潮</option>
+                  <option value="落潮">落潮</option>
+                  <option value="满潮前">满潮前</option>
+                  <option value="满潮后">满潮后</option>
+                  <option value="干潮前">干潮前</option>
+                  <option value="干潮后">干潮后</option>
+                  <option value="平潮转流">平潮转流</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="bestRelativeTime">相对时间</label>
+                <select id="bestRelativeTime">
+                  <option value="30 分钟">30 分钟</option>
+                  <option value="1 小时">1 小时</option>
+                  <option value="2 小时" selected>2 小时</option>
+                  <option value="3 小时">3 小时</option>
+                </select>
+              </div>
+            </div>
+            <div class="row">
+              <div class="field">
+                <label for="bestWindDir">风向</label>
+                <select id="bestWindDir">
+                  <option value="不限风向">不限风向</option>
+                  <option value="东风">东风</option>
+                  <option value="东南风" selected>东南风</option>
+                  <option value="南风">南风</option>
+                  <option value="西南风">西南风</option>
+                  <option value="西风">西风</option>
+                  <option value="西北风">西北风</option>
+                  <option value="北风">北风</option>
+                  <option value="东北风">东北风</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="bestWindSpeed">风力</label>
+                <select id="bestWindSpeed">
+                  <option value="0-3m/s">0-3m/s</option>
+                  <option value="3-5m/s" selected>3-5m/s</option>
+                  <option value="5-8m/s">5-8m/s</option>
+                  <option value="8m/s以上">8m/s以上</option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="bestDaypart">时段</label>
+              <select id="bestDaypart">
+                <option value="不限时段">不限时段</option>
+                <option value="清晨">清晨</option>
+                <option value="白天">白天</option>
+                <option value="傍晚">傍晚</option>
+                <option value="夜间慢收">夜间慢收</option>
+              </select>
+            </div>
+            <input id="bestWindow" type="hidden" />
+            <p class="hint" id="bestWindowPreview"></p>
+          </div>
+          <div class="field">
+            <label for="spotNotes">经验说明</label>
+            <textarea id="spotNotes" placeholder="记录鱼种、季节、潮位、饵型、路亚颜色、注意事项。"></textarea>
+          </div>
+          <div class="actions">
+            <button id="useCurrentLocation" class="secondary" type="button">使用当前位置</button>
+            <button id="saveSpot" type="button">保存钓点</button>
+            <button id="publishTip" class="secondary" type="button">发布心得</button>
+            <button id="resetSpotForm" class="secondary" type="button">清空</button>
+          </div>
+          <p class="hint">当前为本地原型。正式版需要账号、数据库、权限控制和支付系统。</p>
+        </section>
+
+        <section class="group">
+          <h2>钓获日志</h2>
+          <div class="row">
+            <div class="field">
+              <label for="catchSpecies">鱼种</label>
+              <input id="catchSpecies" placeholder="例如：Striped bass" />
+            </div>
+            <div class="field">
+              <label for="catchSize">尺寸/重量</label>
+              <input id="catchSize" placeholder="例如：28in / 5lb" />
+            </div>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="catchMethod">饵/钓法</label>
+              <input id="catchMethod" placeholder="bucktail, minnow, squid..." />
+            </div>
+            <div class="field">
+              <label for="catchPrivacy">日志权限</label>
+              <select id="catchPrivacy">
+                <option value="public">公开</option>
+                <option value="followers">关注者</option>
+                <option value="private">仅自己</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="catchNotes">钓获说明</label>
+            <textarea id="catchNotes" placeholder="记录潮位、时间、风向、走水、站位、鱼口。"></textarea>
+          </div>
+          <div class="actions">
+            <button id="generateCatchReport" class="secondary" type="button">一键生成渔获报告</button>
+            <button id="saveCatch" type="button">记录钓获</button>
+          </div>
+        </section>
+
+        <section class="group">
+          <h2>鱼照识别 / 规则助手</h2>
+          <div class="field">
+            <label for="fishPhotoCamera">现场拍照</label>
+            <input id="fishPhotoCamera" accept="image/*" capture="environment" type="file" />
+          </div>
+          <div class="field">
+            <label for="fishPhotoAlbum">相册上传</label>
+            <input id="fishPhotoAlbum" accept="image/*" type="file" />
+          </div>
+          <div class="field">
+            <label for="fishPhotoHint">鱼种线索</label>
+            <input id="fishPhotoHint" placeholder="可选：例如 striped bass / fluke / porgy" />
+          </div>
+          <div class="actions">
+            <button id="analyzeFishPhoto" type="button">识别鱼种与规则</button>
+          </div>
+          <div class="golden-list" id="fishPhotoResult">
+            <p class="hint">MVP 会根据照片文件名/线索给出候选鱼种和纽约 DEC 规则链接；正式版接 AI 视觉模型。</p>
+          </div>
+        </section>
+
+        <section class="group">
+          <h2>评论 / 心得</h2>
+          <div class="field">
+            <label for="commentText">对当前钓点留言</label>
+            <textarea id="commentText" placeholder="问问题、补充鱼情、验证这个钓点是否有效。"></textarea>
+          </div>
+          <button id="postComment" type="button">发布评论</button>
+        </section>
+      </aside>
+
+      <section class="map-shell" aria-label="钓点地图">
+        <div id="mapCanvas">
+          <div id="fallbackMap" class="fallback-map" role="application" tabindex="0">
+            <div class="water-grid"></div>
+            <div class="shoreline north"></div>
+            <div class="shoreline west"></div>
+            <div class="current-line current-a"></div>
+            <div class="current-line current-b"></div>
+            <div class="fallback-pin" aria-hidden="true"></div>
+            <div class="fallback-label label-nw">Lloyd Harbor</div>
+            <div class="fallback-label label-se">Long Island Sound</div>
+          </div>
+          <canvas id="windParticles" class="wind-particles" aria-hidden="true"></canvas>
+        </div>
+        <div class="map-tip" id="mapTip">点击地图选择钓点；更新预报后生成指数和黄金窗口。</div>
+      </section>
+
+      <aside class="dashboard" aria-label="预报与指数">
+        <section class="score-card">
+          <div class="score-ring" id="scoreRing"><strong id="scoreValue">--</strong></div>
+          <div class="readout">
+            <p class="score-label">当前钓点作钓指数</p>
+            <h2 id="scoreTitle">等待预报</h2>
+            <p class="hint">基于当前坐标与所选小时自动生成。</p>
+            <p class="hint" id="scoreSummary">点击“更新预报”开始。天气和海况默认使用免密钥接口。</p>
+            <div class="pill-row" id="scorePills"></div>
+          </div>
+        </section>
+
+        <section class="metric-grid four">
+          <div class="metric"><span>风速</span><strong id="nowWind">--</strong></div>
+          <div class="metric"><span>气压</span><strong id="nowPressure">--</strong></div>
+          <div class="metric"><span>浪高</span><strong id="nowWave">--</strong></div>
+          <div class="metric"><span>降雨</span><strong id="nowRain">--</strong></div>
+        </section>
+
+        <section class="chart-card">
+          <div class="chart-head">
+            <h3>潮汐 / 作钓指数综合曲线</h3>
+            <button id="openTideModal" class="secondary" type="button">放大</button>
+          </div>
+          <div class="map-score-chart">
+            <div class="map-score-controls">
+              <button class="secondary" type="button" data-hour-window="0">今天</button>
+              <button class="secondary" type="button" data-hour-window="1">明天</button>
+              <button class="secondary" type="button" data-hour-window="2">后天</button>
+              <input id="hourlyTimeInput" type="datetime-local" aria-label="指定时间" />
+            </div>
+            <canvas id="hourlyScoreChart" class="tide-canvas" width="760" height="260"></canvas>
+          </div>
+          <div class="map-score-detail" id="hourlyScoreDetail">
+            <h3>小时详情</h3>
+            <p class="hint">更新预报后，点击曲线上的点查看风、气压、浪高和建议。</p>
+          </div>
+          <h4 class="tide-wind-title">逐小时风向与风级</h4>
+          <div class="table" id="forecastTable"></div>
+        </section>
+
+        <section class="list-card">
+          <h3>钓点资产库</h3>
+          <div class="spot-grid" id="mySpots"></div>
+        </section>
+
+        <section class="list-card">
+          <h3>钓友公开市场</h3>
+          <div class="spot-grid" id="publicSpots"></div>
+        </section>
+
+        <section class="list-card">
+          <h3>鱼情动态</h3>
+          <div class="spot-grid" id="fishFeed"></div>
+        </section>
+
+        <section class="list-card">
+          <h3>本周鱼情榜</h3>
+          <div class="spot-grid" id="weeklyBoard"></div>
+        </section>
+
+        <section class="list-card">
+          <h3>谁最近在这里中过鱼</h3>
+          <div class="spot-grid" id="recentCatches"></div>
+        </section>
+
+        <section class="creator-card">
+          <h3 id="creatorTitle">创作者主页</h3>
+          <p class="hint" id="creatorSummary">选择一个公开钓点，查看博主分享、关注和深度订阅入口。</p>
+          <div class="pill-row" id="creatorStats"></div>
+          <div class="golden-list" id="creatorFeed"></div>
+        </section>
+
+        <section class="list-card">
+          <h3>评论与验证</h3>
+          <div class="golden-list" id="commentList"></div>
+        </section>
+
+        <section class="list-card">
+          <h3>隐私与数据政策</h3>
+          <ul class="policy-list">
+            <li>你的钓点由你管理，可选择仅自己、朋友/群内、关注者、深度关注者或公开可见。</li>
+            <li>钓点、实时位置、渔获记录属于敏感地理信息。除用户授权、用户主动分享或法律要求外，平台不会公开披露精确钓点位置。</li>
+            <li>你保留上传内容的所有权；平台在获得授权后，可用于展示、推荐、鱼情分析、模型训练和产品改进。</li>
+            <li>私人内容默认不进入公共模型训练；付费内容不会被模型免费反向泄露，只可用于授权范围内的匿名统计或创作者工具。</li>
+            <li>在符合法律法规、法院命令、传票、执法机关合法请求或监管要求时，平台可能依法披露必要用户数据，并会在法律允许范围内尽量限制披露范围。</li>
+          </ul>
+        </section>
+
+        <p class="source-note" id="sourceNote">数据源：OpenStreetMap、Open-Meteo Weather & Marine、NOAA CO-OPS tide predictions。</p>
+      </aside>
+    </main>
+
+    <div class="modal-backdrop" id="tideModal" aria-hidden="true">
+      <section class="tide-modal" role="dialog" aria-modal="true" aria-label="放大潮汐曲线">
+        <div class="modal-head">
+          <div>
+            <h2>潮汐 / 作钓指数综合曲线</h2>
+            <p class="hint">当前原型显示 48 小时；正式版可限制普通用户 24 小时，高级用户开放更长时间轴。</p>
+          </div>
+          <button id="closeTideModal" class="secondary" type="button">关闭</button>
+        </div>
+        <div class="tide-canvas-wrap">
+          <canvas id="tideChartLarge" width="1120" height="620"></canvas>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const els = {
+        mapKey: document.querySelector("#mapKey"),
+        pointKey: document.querySelector("#pointKey"),
+        coordinateInput: document.querySelector("#coordinateInput"),
+        startLat: document.querySelector("#startLat"),
+        startLon: document.querySelector("#startLon"),
+        zoom: document.querySelector("#zoom"),
+        tideStation: document.querySelector("#tideStation"),
+        tideStationInfo: document.querySelector("#tideStationInfo"),
+        loadMap: document.querySelector("#loadMap"),
+        fetchForecast: document.querySelector("#fetchForecast"),
+        clearKeys: document.querySelector("#clearKeys"),
+        copyCoords: document.querySelector("#copyCoords"),
+        nickname: document.querySelector("#nickname"),
+        saveProfile: document.querySelector("#saveProfile"),
+        copyShareLink: document.querySelector("#copyShareLink"),
+        resetCommunity: document.querySelector("#resetCommunity"),
+        friendName: document.querySelector("#friendName"),
+        addFriend: document.querySelector("#addFriend"),
+        friendSelect: document.querySelector("#friendSelect"),
+        shareFishingNow: document.querySelector("#shareFishingNow"),
+        friendShareList: document.querySelector("#friendShareList"),
+        importPublicSpots: document.querySelector("#importPublicSpots"),
+        status: document.querySelector("#status"),
+        mapTip: document.querySelector("#mapTip"),
+        mapCanvas: document.querySelector("#mapCanvas"),
+        windParticles: document.querySelector("#windParticles"),
+        fallbackMap: document.querySelector("#fallbackMap"),
+        fallbackPin: document.querySelector(".fallback-pin"),
+        scoreRing: document.querySelector("#scoreRing"),
+        scoreValue: document.querySelector("#scoreValue"),
+        scoreTitle: document.querySelector("#scoreTitle"),
+        scoreSummary: document.querySelector("#scoreSummary"),
+        scorePills: document.querySelector("#scorePills"),
+        nowWind: document.querySelector("#nowWind"),
+        nowPressure: document.querySelector("#nowPressure"),
+        nowWave: document.querySelector("#nowWave"),
+        nowRain: document.querySelector("#nowRain"),
+        tideChart: document.querySelector("#tideChart"),
+        openTideModal: document.querySelector("#openTideModal"),
+        closeTideModal: document.querySelector("#closeTideModal"),
+        tideModal: document.querySelector("#tideModal"),
+        tideChartLarge: document.querySelector("#tideChartLarge"),
+        goldenList: document.querySelector("#goldenList"),
+        hourlyScoreChart: document.querySelector("#hourlyScoreChart"),
+        hourlyScoreDetail: document.querySelector("#hourlyScoreDetail"),
+        hourlyTimeInput: document.querySelector("#hourlyTimeInput"),
+        forecastTable: document.querySelector("#forecastTable"),
+        spotName: document.querySelector("#spotName"),
+        spotVisibility: document.querySelector("#spotVisibility"),
+        targetFish: document.querySelector("#targetFish"),
+        fishSuggestions: document.querySelector("#fishSuggestions"),
+        bestTidePhase: document.querySelector("#bestTidePhase"),
+        bestRelativeTime: document.querySelector("#bestRelativeTime"),
+        bestWindDir: document.querySelector("#bestWindDir"),
+        bestWindSpeed: document.querySelector("#bestWindSpeed"),
+        bestDaypart: document.querySelector("#bestDaypart"),
+        bestWindow: document.querySelector("#bestWindow"),
+        bestWindowPreview: document.querySelector("#bestWindowPreview"),
+        spotNotes: document.querySelector("#spotNotes"),
+        useCurrentLocation: document.querySelector("#useCurrentLocation"),
+        saveSpot: document.querySelector("#saveSpot"),
+        publishTip: document.querySelector("#publishTip"),
+        resetSpotForm: document.querySelector("#resetSpotForm"),
+        catchSpecies: document.querySelector("#catchSpecies"),
+        catchSize: document.querySelector("#catchSize"),
+        catchMethod: document.querySelector("#catchMethod"),
+        catchPrivacy: document.querySelector("#catchPrivacy"),
+        catchNotes: document.querySelector("#catchNotes"),
+        generateCatchReport: document.querySelector("#generateCatchReport"),
+        saveCatch: document.querySelector("#saveCatch"),
+        fishPhotoCamera: document.querySelector("#fishPhotoCamera"),
+        fishPhotoAlbum: document.querySelector("#fishPhotoAlbum"),
+        fishPhotoHint: document.querySelector("#fishPhotoHint"),
+        analyzeFishPhoto: document.querySelector("#analyzeFishPhoto"),
+        fishPhotoResult: document.querySelector("#fishPhotoResult"),
+        commentText: document.querySelector("#commentText"),
+        postComment: document.querySelector("#postComment"),
+        mySpots: document.querySelector("#mySpots"),
+        publicSpots: document.querySelector("#publicSpots"),
+        fishFeed: document.querySelector("#fishFeed"),
+        weeklyBoard: document.querySelector("#weeklyBoard"),
+        recentCatches: document.querySelector("#recentCatches"),
+        creatorTitle: document.querySelector("#creatorTitle"),
+        creatorSummary: document.querySelector("#creatorSummary"),
+        creatorStats: document.querySelector("#creatorStats"),
+        creatorFeed: document.querySelector("#creatorFeed"),
+        commentList: document.querySelector("#commentList"),
+        sourceNote: document.querySelector("#sourceNote"),
+      };
+
+      const WEATHER_URL = "https://api.open-meteo.com/v1/forecast";
+      const MARINE_URL = "https://marine-api.open-meteo.com/v1/marine";
+      const NOAA_URL = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter";
+      const NOAA_STATIONS_URL = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions";
+      const DEG = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+      const TIDE_STATIONS = [
+        { id: "8515921", name: "Lloyd Harbor, Huntington Bay", lat: 40.91, lon: -73.4317, shore: "北岸" },
+        { id: "8516061", name: "Cold Spring Harbor", lat: 40.8733, lon: -73.47, shore: "北岸" },
+        { id: "8515786", name: "Eatons Neck Point", lat: 40.9533, lon: -73.4, shore: "北岸" },
+        { id: "8515586", name: "Northport, Northport Bay", lat: 40.9, lon: -73.3533, shore: "北岸" },
+        { id: "8514560", name: "Port Jefferson", lat: 40.95, lon: -73.0767, shore: "北岸" },
+        { id: "8514422", name: "Cedar Beach", lat: 40.965, lon: -73.0433, shore: "北岸" },
+        { id: "8512987", name: "Northville", lat: 40.9817, lon: -72.645, shore: "北岸" },
+        { id: "8512668", name: "Mattituck Inlet", lat: 41.015, lon: -72.5617, shore: "北岸" },
+        { id: "8511907", name: "Greenport", lat: 41.101, lon: -72.3612, shore: "北岸/东端" },
+        { id: "8511671", name: "Orient", lat: 41.1367, lon: -72.3067, shore: "东端" },
+        { id: "8510560", name: "Montauk, Fort Pond Bay", lat: 41.0483, lon: -71.9594, shore: "东端" },
+        { id: "8510448", name: "Lake Montauk", lat: 41.0733, lon: -71.935, shore: "东端" },
+        { id: "8516881", name: "East Rockaway Inlet, Atlantic Beach", lat: 40.595, lon: -73.7433, shore: "南岸" },
+        { id: "8516402", name: "Point Lookout Marina, Jones Inlet", lat: 40.5939, lon: -73.584, shore: "南岸" },
+        { id: "8516155", name: "Green Island", lat: 40.6233, lon: -73.5017, shore: "南岸" },
+        { id: "8515864", name: "Amityville", lat: 40.655, lon: -73.4183, shore: "南岸/湾内" },
+        { id: "8515186", name: "Fire Island Coast Guard Station", lat: 40.6267, lon: -73.26, shore: "南岸" },
+        { id: "8514779", name: "Seaview Ferry Dock", lat: 40.6493, lon: -73.1506, shore: "南岸/湾内" },
+        { id: "8514322", name: "Patchogue", lat: 40.75, lon: -73.0, shore: "南岸/湾内" },
+        { id: "8513825", name: "Smith Point Bridge, Narrow Bay", lat: 40.7383, lon: -72.8683, shore: "南岸" },
+        { id: "8513398", name: "Moriches Inlet", lat: 40.7644, lon: -72.756, shore: "南岸" },
+        { id: "8512769", name: "Shinnecock Yacht Club, Penniman Creek", lat: 40.8186, lon: -72.5866, shore: "南岸/湾内" },
+        { id: "8512354", name: "Shinnecock Inlet (ocean)", lat: 40.8367, lon: -72.48, shore: "南岸" },
+        { id: "8511629", name: "Sag Harbor", lat: 41.0033, lon: -72.2967, shore: "Peconic/Gardiners" },
+      ];
+
+      let selectedPoint = null;
+      let baseMap = null;
+      let marker = null;
+      let spotLayer = null;
+      let tideSeries = [];
+      let tideHighLow = [];
+      let forecastRows = [];
+      let selectedSpotId = null;
+      let spots = [];
+      let userProfile = { nickname: "我" };
+      let friends = [];
+      let friendShares = [];
+      let windParticleFrame = null;
+      let windParticleResizeBound = false;
+      let windParticles = [];
+      let hourlyScores = [];
+      let selectedHourlyIndex = 0;
+      let hourlyWindowStartIndex = 0;
+      let isDraggingHourlyScore = false;
+      let hourlyDragState = null;
+      let sunEvents = [];
+      let globalTideStations = null;
+      let currentTideStation = null;
+      let forecastUpdating = false;
+      let autoRefreshTimer = null;
+      const FISH_CATALOG = [
+        { name: "Striped bass", aliases: ["striper", "bass"], habitat: "salt", local: 10, months: [4, 5, 6, 9, 10, 11], note: "长岛春秋主力鱼" },
+        { name: "Fluke", aliases: ["summer flounder"], habitat: "salt", local: 9, months: [5, 6, 7, 8, 9], note: "夏季湾口和沙底常见" },
+        { name: "Bluefish", aliases: ["blue"], habitat: "salt", local: 8, months: [5, 6, 7, 8, 9, 10], note: "追饵鱼群，风浪边也常见" },
+        { name: "Porgy", aliases: ["scup"], habitat: "salt", local: 8, months: [6, 7, 8, 9, 10], note: "北岸礁石和码头常见" },
+        { name: "Black sea bass", aliases: ["sea bass"], habitat: "salt", local: 7, months: [6, 7, 8, 9, 10], note: "结构区、礁石和 wreck" },
+        { name: "Weakfish", aliases: ["squeteague"], habitat: "salt", local: 5, months: [5, 6, 7, 8, 9], note: "湾内窗口型鱼情" },
+        { name: "False albacore", aliases: ["albie", "little tunny"], habitat: "salt", local: 6, months: [8, 9, 10], note: "秋季东端和外海追饵" },
+        { name: "Blackfish", aliases: ["tautog", "tog"], habitat: "salt", local: 7, months: [4, 10, 11, 12], note: "冷水季结构区" },
+        { name: "Bluefin tuna", aliases: ["tuna"], habitat: "offshore", local: 4, months: [6, 7, 8, 9, 10], note: "近海/外海高阶目标" },
+        { name: "Largemouth bass", aliases: ["largemouth"], habitat: "fresh", local: 6, months: [5, 6, 7, 8, 9], note: "淡水湖池塘主力" },
+        { name: "Smallmouth bass", aliases: ["smallmouth"], habitat: "fresh", local: 4, months: [5, 6, 7, 8, 9], note: "淡水结构区" },
+        { name: "Chain pickerel", aliases: ["pickerel"], habitat: "fresh", local: 6, months: [3, 4, 5, 9, 10, 11], note: "草区和浅水" },
+        { name: "Yellow perch", aliases: ["perch"], habitat: "fresh", local: 5, months: [3, 4, 5, 10, 11], note: "淡水岸钓常见" },
+        { name: "Trout", aliases: ["rainbow trout", "brown trout"], habitat: "fresh", local: 5, months: [3, 4, 5, 10, 11], note: "放流季更强" },
+        { name: "Carp", aliases: ["common carp"], habitat: "fresh", local: 3, months: [5, 6, 7, 8, 9], note: "河湖底钓" },
+      ];
+      const PUBLIC_SEED_SPOTS = [
+        {
+          id: "public-captree-state-park",
+          owner: "1490公开资料库",
+          name: "Captree State Park 钓鱼码头",
+          lat: 40.6409,
+          lon: -73.2556,
+          visibility: "public",
+          targetFish: "Fluke, sea bass, bluefish, striped bass",
+          bestWindow: "Great South Bay / Fire Island Inlet 附近，优先看潮流转向和风浪安全。",
+          notes: "公开资料显示该州立公园提供海湾、码头、船钓和 charter fleet 相关钓鱼入口。正式版应补充停车、季节规则和现场公告。",
+          sourceType: "public",
+          sourceName: "NY State Parks / public overview",
+          sourceUrl: "https://parks.ny.gov/parks/captree",
+        },
+        {
+          id: "public-robert-moses-state-park",
+          owner: "1490公开资料库",
+          name: "Robert Moses State Park / Fire Island Inlet",
+          lat: 40.625,
+          lon: -73.261,
+          visibility: "public",
+          targetFish: "Striped bass, bluefish, fluke",
+          bestWindow: "入海口附近注意潮流、浪高和风向，夜间/清晨窗口常需结合许可和安全。",
+          notes: "基于州立公园与公开地图资料整理。该点作为公共 surf / inlet fishing 候选入口，不包含私人攻略。",
+          sourceType: "public",
+          sourceName: "NY State Parks / OpenStreetMap",
+          sourceUrl: "https://parks.ny.gov/parks/7",
+        },
+        {
+          id: "public-jones-beach-state-park",
+          owner: "1490公开资料库",
+          name: "Jones Beach State Park 海边钓点",
+          lat: 40.596,
+          lon: -73.515,
+          visibility: "public",
+          targetFish: "Striped bass, bluefish, fluke",
+          bestWindow: "海滩和 inlet 周边看浪高、离岸流和潮汐窗口，风大时谨慎。",
+          notes: "公共州立公园海岸线钓点候选。正式版需要接入停车区、开放时间、permit 和保护区边界。",
+          sourceType: "public",
+          sourceName: "NY State Parks / OpenStreetMap",
+          sourceUrl: "https://parks.ny.gov/parks/jonesbeach",
+        },
+        {
+          id: "public-sunken-meadow-state-park",
+          owner: "1490公开资料库",
+          name: "Sunken Meadow State Park 岸钓区",
+          lat: 40.9106,
+          lon: -73.261,
+          visibility: "public",
+          targetFish: "Striped bass, porgy, bluefish",
+          bestWindow: "Long Island Sound 北岸，优先看北风、浪高和涨落潮交界。",
+          notes: "公共州立公园和公开地图资料整理，适合作为北岸岸钓/海湾观察点初始资料。",
+          sourceType: "public",
+          sourceName: "NY State Parks / OpenStreetMap",
+          sourceUrl: "https://parks.ny.gov/parks/sunkenmeadow",
+        },
+        {
+          id: "public-caumsett-state-park",
+          owner: "1490公开资料库",
+          name: "Caumsett State Historic Park Preserve 岸线",
+          lat: 40.927,
+          lon: -73.475,
+          visibility: "public",
+          targetFish: "Striped bass, bluefish",
+          bestWindow: "北岸海湾口，关注潮位、风向和公园当日规则。",
+          notes: "公开公园资料和地图资料整理。部分区域可能有开放时间、permit 或步行距离限制，正式版需加规则提示。",
+          sourceType: "public",
+          sourceName: "NY State Parks / OpenStreetMap",
+          sourceUrl: "https://parks.ny.gov/parks/caumsett",
+        },
+        {
+          id: "public-orient-beach-state-park",
+          owner: "1490公开资料库",
+          name: "Orient Beach State Park 海湾岸线",
+          lat: 41.142,
+          lon: -72.249,
+          visibility: "public",
+          targetFish: "Porgy, bluefish, striped bass",
+          bestWindow: "Peconic Bay / Gardiners Bay 区域，风浪小且潮水移动时优先。",
+          notes: "公开州立公园资料整理，适合作为东端海湾岸钓候选点。",
+          sourceType: "public",
+          sourceName: "NY State Parks / OpenStreetMap",
+          sourceUrl: "https://parks.ny.gov/parks/orientbeach",
+        },
+        {
+          id: "public-montauk-point-state-park",
+          owner: "1490公开资料库",
+          name: "Montauk Point State Park Surfcasting",
+          lat: 41.071,
+          lon: -71.857,
+          visibility: "public",
+          targetFish: "Striped bass, bluefish, false albacore",
+          bestWindow: "外海浪况、风向和潮流强，适合进阶钓友，安全优先。",
+          notes: "Montauk Point 是公开知名岸钓区域。此处只记录公共地点，不搬运任何个人点位或攻略。",
+          sourceType: "public",
+          sourceName: "NY State Parks / OpenStreetMap",
+          sourceUrl: "https://parks.ny.gov/parks/montaukpoint",
+        },
+        {
+          id: "public-wildwood-lake",
+          owner: "1490公开资料库",
+          name: "Wildwood Lake 淡水钓点",
+          lat: 40.897,
+          lon: -72.642,
+          visibility: "public",
+          targetFish: "Largemouth bass, chain pickerel, perch, trout",
+          bestWindow: "淡水湖优先看气压稳定、低风浪和清晨/傍晚窗口。",
+          notes: "NYS DEC 公开资料显示该湖有鱼种和 access 信息，但当地可能有居民/陪同等限制，需在正式版明确规则。",
+          sourceType: "public",
+          sourceName: "NYS DEC public lake information",
+          sourceUrl: "https://dec.ny.gov/places/wildwood-lake",
+        },
+      ];
+
+      restoreSavedState();
+      updateCoordinates(parseNumber(els.startLat, 40.908), parseNumber(els.startLon, -73.454));
+      userProfile = loadProfile();
+      els.nickname.value = userProfile.nickname;
+      friends = loadFriends();
+      friendShares = loadFriendShares();
+      spots = loadSpots();
+      spots = mergePublicSeedSpots(normalizeSpots(spots));
+      selectedSpotId = new URLSearchParams(location.search).get("spot") || spots[0]?.id || null;
+      drawEmptyCharts();
+      initWindParticles();
+      renderSpots();
+      renderFriends();
+      renderFishFeed();
+      loadBackendFeed();
+
+      function restoreSavedState() {
+        els.mapKey.value = localStorage.getItem("weatherapi_key") || "";
+        els.pointKey.value = localStorage.getItem("stormglass_key") || "";
+        els.tideStation.value = localStorage.getItem("noaa_tide_station") || "8516945";
+      }
+
+      function loadProfile() {
+        const saved = localStorage.getItem("fishing_user_profile_v1");
+        if (!saved) return { nickname: "我" };
+        try {
+          return { nickname: JSON.parse(saved).nickname || "我" };
+        } catch {
+          return { nickname: "我" };
+        }
+      }
+
+      function loadFriends() {
+        const saved = localStorage.getItem("fishing_friends_v1");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) return parsed;
+          } catch {
+            localStorage.removeItem("fishing_friends_v1");
+          }
+        }
+        return ["小陈", "长岛阿明", "老王"].map((name) => ({ id: crypto.randomUUID(), name }));
+      }
+
+      function loadFriendShares() {
+        const saved = localStorage.getItem("fishing_friend_shares_v1");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) return parsed;
+          } catch {
+            localStorage.removeItem("fishing_friend_shares_v1");
+          }
+        }
+        return [];
+      }
+
+      function persistFriends() {
+        localStorage.setItem("fishing_friends_v1", JSON.stringify(friends));
+      }
+
+      function persistFriendShares() {
+        localStorage.setItem("fishing_friend_shares_v1", JSON.stringify(friendShares));
+      }
+
+      function setStatus(message, tone = "normal") {
+        els.status.textContent = message;
+        els.status.classList.toggle("warning", tone === "warning");
+        els.status.classList.toggle("good", tone === "good");
+      }
+
+      function parseNumber(input, fallback) {
+        const value = Number(input.value);
+        return Number.isFinite(value) ? value : fallback;
+      }
+
+      function parseCoordinateInput(value) {
+        const parts = String(value || "").match(/-?\d+(?:\.\d+)?/g) || [];
+        if (parts.length < 2) return null;
+        const lat = Number(parts[0]);
+        const lon = Number(parts[1]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+        if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+        return { lat, lon };
+      }
+
+      function formatTime(date) {
+        return new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(date);
+      }
+
+      function formatDateTime(date) {
+        return new Intl.DateTimeFormat("zh-CN", {
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        }).format(date);
+      }
+
+      function formatAxisDate(date) {
+        return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit" }).format(date);
+      }
+
+      function formatWeekDate(date) {
+        return new Intl.DateTimeFormat("zh-CN", { weekday: "short", day: "2-digit" }).format(date);
+      }
+
+      function windDirName(deg) {
+        if (!Number.isFinite(deg)) return "--";
+        return DEG[Math.round(deg / 22.5) % 16];
+      }
+
+      function windSpeedColor(speed) {
+        if (!Number.isFinite(speed)) return "#eef3f7";
+        if (speed < 2) return "linear-gradient(90deg, #dff7ff, #9ee7ff)";
+        if (speed < 4) return "linear-gradient(90deg, #96f2dd, #13d790)";
+        if (speed < 6) return "linear-gradient(90deg, #24dc77, #c9e900)";
+        if (speed < 8) return "linear-gradient(90deg, #e8e100, #ff9a1f)";
+        if (speed < 11) return "linear-gradient(90deg, #ff9a1f, #ef4d25)";
+        return "linear-gradient(90deg, #ef4d25, #b91c1c)";
+      }
+
+      function windForceLevel(speed) {
+        if (!Number.isFinite(speed)) return "--";
+        const thresholds = [0.3, 1.6, 3.4, 5.5, 8, 10.8, 13.9, 17.2, 20.8, 24.5, 28.5, 32.7];
+        return thresholds.findIndex((limit) => speed < limit);
+      }
+
+      function tempF(celsius) {
+        return Number.isFinite(celsius) ? Math.round((celsius * 9) / 5 + 32) : "--";
+      }
+
+      function likelyHabitatForPoint(point = selectedPoint) {
+        if (!point) return "salt";
+        const nearLongIsland = point.lat > 40.45 && point.lat < 41.35 && point.lon > -74.2 && point.lon < -71.7;
+        if (!nearLongIsland) return Math.abs(point.lat) < 60 ? "salt" : "fresh";
+        const inlandFresh =
+          point.lat < 40.78 &&
+          point.lat > 40.65 &&
+          point.lon < -72.75 &&
+          point.lon > -73.15;
+        return inlandFresh ? "fresh" : "salt";
+      }
+
+      function fishSuggestionScore(fish, query, month, habitat) {
+        const q = query.toLowerCase();
+        const names = [fish.name, ...fish.aliases].map((item) => item.toLowerCase());
+        let score = fish.local;
+        if (fish.habitat === habitat) score += 5;
+        if (fish.habitat === "offshore" && habitat === "salt") score += 2;
+        if (fish.months.includes(month)) score += 6;
+        if (names.some((name) => name.startsWith(q))) score += 10;
+        else if (names.some((name) => name.includes(q))) score += 4;
+        return score;
+      }
+
+      function fishSuggestions(query) {
+        const trimmed = query.trim().split(",").pop().trim();
+        if (!trimmed) return [];
+        const month = new Date().getMonth() + 1;
+        const habitat = likelyHabitatForPoint();
+        return FISH_CATALOG.map((fish) => ({
+          fish,
+          score: fishSuggestionScore(fish, trimmed, month, habitat),
+          inSeason: fish.months.includes(month),
+        }))
+          .filter(({ fish }) => {
+            const q = trimmed.toLowerCase();
+            return [fish.name, ...fish.aliases].some((name) => name.toLowerCase().includes(q));
+          })
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 6);
+      }
+
+      function renderFishSuggestions() {
+        const suggestions = fishSuggestions(els.targetFish.value);
+        if (!suggestions.length) {
+          els.fishSuggestions.classList.remove("open");
+          els.fishSuggestions.innerHTML = "";
+          return;
+        }
+        els.fishSuggestions.innerHTML = suggestions
+          .map(({ fish, inSeason }) => {
+            const meta = `${inSeason ? "本季强" : "非主季"} · ${fish.habitat === "fresh" ? "淡水" : fish.habitat === "offshore" ? "近海/外海" : "海水"} · ${fish.note}`;
+            return `<button class="suggestion-item" type="button" data-fish="${escapeHtml(fish.name)}"><span class="suggestion-main">${escapeHtml(fish.name)}</span><span class="suggestion-meta">${escapeHtml(meta)}</span></button>`;
+          })
+          .join("");
+        els.fishSuggestions.classList.add("open");
+      }
+
+      function addTargetFish(name) {
+        const parts = els.targetFish.value
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+        parts.pop();
+        if (!parts.some((item) => item.toLowerCase() === name.toLowerCase())) parts.push(name);
+        els.targetFish.value = parts.join(", ");
+        els.fishSuggestions.classList.remove("open");
+        els.targetFish.focus();
+      }
+
+      function buildBestWindowText() {
+        const tide = els.bestTidePhase.value;
+        const relative = els.bestRelativeTime.value;
+        const windDir = els.bestWindDir.value;
+        const windSpeed = els.bestWindSpeed.value;
+        const daypart = els.bestDaypart.value;
+        const windText = windDir === "不限风向" ? `风力 ${windSpeed}` : `${windDir} ${windSpeed}`;
+        const daypartText = daypart === "不限时段" ? "" : `，${daypart}`;
+        return `${tide} ${relative}，${windText}${daypartText}`;
+      }
+
+      function syncBestWindow() {
+        const text = buildBestWindowText();
+        els.bestWindow.value = text;
+        els.bestWindowPreview.textContent = `保存格式：${text}`;
+      }
+
+      function applyBestWindowText(text) {
+        if (!text) {
+          syncBestWindow();
+          return;
+        }
+        const selectIfContains = (select, value) => {
+          const option = [...select.options].find((item) => value.includes(item.value));
+          if (option) select.value = option.value;
+        };
+        selectIfContains(els.bestTidePhase, text);
+        selectIfContains(els.bestRelativeTime, text);
+        selectIfContains(els.bestWindDir, text);
+        selectIfContains(els.bestWindSpeed, text);
+        selectIfContains(els.bestDaypart, text);
+        els.bestWindow.value = text;
+        els.bestWindowPreview.textContent = `保存格式：${text}`;
+      }
+
+      function isDaylight(date) {
+        const key = date.toDateString();
+        const sunrise = sunEvents.find((event) => event.type === "sunrise" && event.time.toDateString() === key)?.time;
+        const sunset = sunEvents.find((event) => event.type === "sunset" && event.time.toDateString() === key)?.time;
+        if (!sunrise || !sunset) return date.getHours() >= 6 && date.getHours() < 20;
+        return date >= sunrise && date <= sunset;
+      }
+
+      function weatherIcon(row) {
+        if (Number.isFinite(row.precip) && row.precip >= 1) return "🌧";
+        if (Number.isFinite(row.precip) && row.precip >= 0.2) return isDaylight(row.time) ? "🌦" : "🌙";
+        return isDaylight(row.time) ? "☀" : "◐";
+      }
+
+      function updateCoordinates(lat, lon, syncInputs = true) {
+        selectedPoint = {
+          lat: Number(lat.toFixed(6)),
+          lon: Number(lon.toFixed(6)),
+        };
+        if (syncInputs) {
+          els.startLat.value = selectedPoint.lat.toFixed(6);
+          els.startLon.value = selectedPoint.lon.toFixed(6);
+          els.coordinateInput.value = `${selectedPoint.lat.toFixed(6)}, ${selectedPoint.lon.toFixed(6)}`;
+        }
+        const fallbackStation = nearestTideStationFromList(TIDE_STATIONS, selectedPoint);
+        if (fallbackStation) setTideStation(fallbackStation, "本地候选");
+      }
+
+      function moveFallbackPin(xPercent, yPercent) {
+        els.fallbackPin.style.left = `${xPercent}%`;
+        els.fallbackPin.style.top = `${yPercent}%`;
+      }
+
+      function selectFallbackPoint(event) {
+        const rect = els.fallbackMap.getBoundingClientRect();
+        const x = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1);
+        const y = Math.min(Math.max((event.clientY - rect.top) / rect.height, 0), 1);
+        const centerLat = parseNumber(els.startLat, 40.908);
+        const centerLon = parseNumber(els.startLon, -73.454);
+        const lat = centerLat + (0.5 - y) * 0.18;
+        const lon = centerLon + (x - 0.5) * 0.32;
+        moveFallbackPin(x * 100, y * 100);
+        updateCoordinates(lat, lon);
+        setStatus("已选择钓点，正在自动更新预报。", "good");
+        autoLoadMapAndForecast(250);
+      }
+
+      function placeCrosshair(map, lat, lon) {
+        const icon = L.divIcon({
+          className: "",
+          html: '<div class="crosshair" aria-hidden="true"></div>',
+          iconSize: [30, 30],
+          iconAnchor: [15, 15],
+        });
+        if (!marker) {
+          marker = L.marker([lat, lon], { icon }).addTo(map);
+          return;
+        }
+        marker.setLatLng([lat, lon]);
+      }
+
+      function canShowSpotOnMap(spot) {
+        if (spot.owner === userProfile.nickname) return true;
+        if (spot.visibility === "private") return false;
+        if (spot.visibility === "followers") return !!spot.followed;
+        return true;
+      }
+
+      function canShowExactSpot(spot) {
+        if (spot.owner === userProfile.nickname) return true;
+        if (spot.visibility === "public") return true;
+        if (spot.visibility === "followers") return !!spot.followed;
+        if (spot.visibility === "paid") return !!spot.subscribed;
+        return false;
+      }
+
+      function fuzzySpotPoint(spot) {
+        const latShift = ((hashString(spot.id) % 17) - 8) * 0.006;
+        const lonShift = ((hashString(`${spot.id}:lon`) % 17) - 8) * 0.008;
+        return { lat: spot.lat + latShift, lon: spot.lon + lonShift };
+      }
+
+      function hashString(value) {
+        return String(value)
+          .split("")
+          .reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0, 7);
+      }
+
+      function renderMapSpots() {
+        if (!baseMap || typeof L === "undefined") return;
+        if (!spotLayer) spotLayer = L.layerGroup().addTo(baseMap);
+        spotLayer.clearLayers();
+        spots.filter(canShowSpotOnMap).forEach((spot) => {
+          const exact = canShowExactSpot(spot);
+          const point = exact ? spot : fuzzySpotPoint(spot);
+          const isMine = spot.owner === userProfile.nickname;
+          const isActive = spot.id === selectedSpotId;
+          const color = isMine ? "#d98b00" : spot.visibility === "paid" && !spot.subscribed ? "#8a5cf6" : "#0f6f82";
+          const radius = isActive ? 9 : 7;
+          const layer = exact
+            ? L.circleMarker([point.lat, point.lon], {
+                radius,
+                color: "#ffffff",
+                weight: 2,
+                fillColor: color,
+                fillOpacity: 0.9,
+              })
+            : L.circle([point.lat, point.lon], {
+                radius: 900,
+                color,
+                weight: 1,
+                fillColor: color,
+                fillOpacity: 0.16,
+              });
+          const title = `${spot.name}${exact ? "" : "（模糊区域）"}`;
+          layer.bindTooltip(title, { direction: "top" });
+          layer.on("click", () => {
+            if (!exact) {
+              baseMap.setView([point.lat, point.lon], Math.max(baseMap.getZoom?.() || 10, 10));
+              setStatus(spot.visibility === "paid" ? "该钓点为深度关注内容，地图仅显示模糊区域。" : "关注后可查看该钓点精确位置。", "warning");
+              return;
+            }
+            selectSpot(spot);
+          });
+          layer.addTo(spotLayer);
+        });
+      }
+
+      function initMap() {
+        if (baseMap) {
+          const zoom = Math.max(3, Math.min(14, parseNumber(els.zoom, baseMap.getZoom?.() || 10)));
+          baseMap.setView([selectedPoint.lat, selectedPoint.lon], zoom);
+          placeCrosshair(baseMap, selectedPoint.lat, selectedPoint.lon);
+          resizeWindCanvas();
+          seedWindParticles();
+          setStatus("OpenStreetMap 地图已载入。", "good");
+          return;
+        }
+        if (typeof L === "undefined") {
+          setStatus("Leaflet 脚本未加载成功，请刷新后重试。", "warning");
+          return;
+        }
+
+        localStorage.setItem("weatherapi_key", els.mapKey.value.trim());
+        localStorage.setItem("stormglass_key", els.pointKey.value.trim());
+        els.loadMap.disabled = true;
+        setStatus("正在载入 OpenStreetMap 地图...");
+        const lat = selectedPoint.lat;
+        const lon = selectedPoint.lon;
+        const zoom = Math.max(3, Math.min(14, parseNumber(els.zoom, 10)));
+
+        baseMap = L.map("mapCanvas", { zoomControl: true }).setView([lat, lon], zoom);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        }).addTo(baseMap);
+        els.mapCanvas.classList.add("map-ready");
+        placeCrosshair(baseMap, lat, lon);
+        renderMapSpots();
+        initWindParticles();
+        baseMap.on("click", (event) => {
+          const pointLat = event.latlng.lat;
+          const pointLon = event.latlng.lng;
+          updateCoordinates(pointLat, pointLon);
+          placeCrosshair(baseMap, pointLat, pointLon);
+          setStatus("已选择钓点，正在自动更新预报。", "good");
+          autoLoadMapAndForecast(250);
+        });
+        baseMap.on("zoomend moveend", () => {
+          resizeWindCanvas();
+          seedWindParticles();
+        });
+        els.loadMap.disabled = false;
+        setStatus("OpenStreetMap 地图已载入。", "good");
+      }
+
+      async function updateAllData() {
+        if (forecastUpdating) return;
+        forecastUpdating = true;
+        localStorage.setItem("weatherapi_key", els.mapKey.value.trim());
+        localStorage.setItem("stormglass_key", els.pointKey.value.trim());
+        localStorage.setItem("noaa_tide_station", els.tideStation.value.trim());
+        els.fetchForecast.disabled = true;
+        setStatus("正在更新天气、自动匹配潮汐站、潮汐和指数...");
+
+        try {
+          const [forecast, tides] = await Promise.all([fetchPointForecast(), fetchTides()]);
+          forecastRows = forecast;
+          tideSeries = tides.series;
+          tideHighLow = tides.highLow;
+          renderAll(false);
+          seedWindParticles();
+          setStatus("预报已更新。", "good");
+        } catch (error) {
+          console.warn(error);
+          forecastRows = makeDemoForecast();
+          sunEvents = makeDemoSunEvents();
+          try {
+            const tides = await fetchTides();
+            tideSeries = tides.series;
+            tideHighLow = tides.highLow;
+          } catch (tideError) {
+            tideSeries = makeDemoTideSeries();
+            tideHighLow = inferHighLow(tideSeries);
+          }
+          renderAll(true);
+          seedWindParticles();
+          setStatus(error.message || "数据接口失败，已切换演示数据。", "warning");
+        } finally {
+          forecastUpdating = false;
+          els.fetchForecast.disabled = false;
+        }
+      }
+
+      function autoLoadMapAndForecast(delay = 250) {
+        clearTimeout(autoRefreshTimer);
+        autoRefreshTimer = setTimeout(() => {
+          initMap();
+          updateAllData();
+        }, delay);
+      }
+
+      async function fetchPointForecast() {
+        const lat = selectedPoint.lat;
+        const lon = selectedPoint.lon;
+        const weatherParams = new URLSearchParams({
+          latitude: lat,
+          longitude: lon,
+          hourly: "wind_speed_10m,wind_gusts_10m,wind_direction_10m,surface_pressure,temperature_2m,relative_humidity_2m,precipitation",
+          daily: "sunrise,sunset",
+          forecast_days: "7",
+          timezone: "auto",
+          wind_speed_unit: "ms",
+        });
+        const marineParams = new URLSearchParams({
+          latitude: lat,
+          longitude: lon,
+          hourly: "wave_height,wave_period,swell_wave_height,swell_wave_period,sea_surface_temperature,ocean_current_velocity,ocean_current_direction",
+          forecast_days: "7",
+          timezone: "auto",
+          length_unit: "metric",
+          cell_selection: "sea",
+        });
+        const weatherReq = fetch(`${WEATHER_URL}?${weatherParams.toString()}`).then(readJson);
+        const seaReq = fetch(`${MARINE_URL}?${marineParams.toString()}`).then(readJson);
+        const [weather, sea] = await Promise.all([weatherReq, seaReq]);
+        return normalizeOpenMeteoForecast(weather, sea);
+      }
+
+      async function readJson(response) {
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`Open-Meteo 请求失败：${response.status} ${text.slice(0, 120)}`);
+        }
+        return response.json();
+      }
+
+      function normalizeOpenMeteoForecast(weather, sea) {
+        const weatherHourly = weather.hourly || {};
+        const weatherDaily = weather.daily || {};
+        const seaHourly = sea.hourly || {};
+        const ts = weatherHourly.time || [];
+        sunEvents = normalizeSunEvents(weatherDaily);
+        return ts.slice(0, 168).map((time, index) => {
+          return {
+            time: new Date(time),
+            wind: valueAt(weatherHourly, "wind_speed_10m", index),
+            gust: valueAt(weatherHourly, "wind_gusts_10m", index),
+            windDir: valueAt(weatherHourly, "wind_direction_10m", index),
+            pressure: valueAt(weatherHourly, "surface_pressure", index),
+            temp: valueAt(weatherHourly, "temperature_2m", index),
+            rh: valueAt(weatherHourly, "relative_humidity_2m", index),
+            precip: valueAt(weatherHourly, "precipitation", index),
+            wave: valueAt(seaHourly, "wave_height", index),
+            wavePeriod: valueAt(seaHourly, "wave_period", index),
+            swell: valueAt(seaHourly, "swell_wave_height", index),
+            swellPeriod: valueAt(seaHourly, "swell_wave_period", index),
+            sst: valueAt(seaHourly, "sea_surface_temperature", index),
+            currentVelocity: valueAt(seaHourly, "ocean_current_velocity", index),
+            currentDirection: valueAt(seaHourly, "ocean_current_direction", index),
+          };
+        });
+      }
+
+      function valueAt(obj, key, index) {
+        const value = obj && Array.isArray(obj[key]) ? obj[key][index] : null;
+        return Number.isFinite(value) ? value : null;
+      }
+
+      function normalizeSunEvents(daily) {
+        const events = [];
+        (daily.sunrise || []).forEach((time) => events.push({ type: "sunrise", time: new Date(time) }));
+        (daily.sunset || []).forEach((time) => events.push({ type: "sunset", time: new Date(time) }));
+        return events
+          .filter((event) => !Number.isNaN(event.time.getTime()))
+          .sort((a, b) => a.time - b.time);
+      }
+
+      async function resolveNearestTideStation() {
+        try {
+          const stations = await loadGlobalTideStations();
+          const station = nearestTideStationFromList(stations, selectedPoint);
+          if (station) {
+            setTideStation(station, "NOAA 全球自动匹配");
+            return station;
+          }
+        } catch (error) {
+          console.warn(error);
+        }
+        const fallback = nearestTideStationFromList(TIDE_STATIONS, selectedPoint) || {
+          id: "8516945",
+          name: "Kings Point",
+          lat: 40.8103,
+          lon: -73.7649,
+        };
+        setTideStation(fallback, "本地 fallback");
+        return fallback;
+      }
+
+      async function loadGlobalTideStations() {
+        if (globalTideStations?.length) return globalTideStations;
+        const cached = readTideStationCache();
+        if (cached.length) {
+          globalTideStations = cached;
+          return globalTideStations;
+        }
+        const response = await fetch(NOAA_STATIONS_URL);
+        if (!response.ok) throw new Error("NOAA 潮汐站列表加载失败。");
+        const data = await response.json();
+        globalTideStations = (data.stations || [])
+          .map((station) => ({
+            id: station.id,
+            name: station.name,
+            lat: Number(station.lat),
+            lon: Number(station.lng),
+            type: station.type || "",
+          }))
+          .filter((station) => station.id && Number.isFinite(station.lat) && Number.isFinite(station.lon));
+        writeTideStationCache(globalTideStations);
+        return globalTideStations;
+      }
+
+      function readTideStationCache() {
+        try {
+          const saved = JSON.parse(localStorage.getItem("noaa_tide_stations_cache_v1") || "null");
+          if (!saved || Date.now() - saved.savedAt > 7 * 24 * 60 * 60 * 1000) return [];
+          return Array.isArray(saved.stations) ? saved.stations : [];
+        } catch {
+          localStorage.removeItem("noaa_tide_stations_cache_v1");
+          return [];
+        }
+      }
+
+      function writeTideStationCache(stations) {
+        try {
+          localStorage.setItem("noaa_tide_stations_cache_v1", JSON.stringify({ savedAt: Date.now(), stations }));
+        } catch {
+          localStorage.removeItem("noaa_tide_stations_cache_v1");
+        }
+      }
+
+      function nearestTideStationFromList(stations, point) {
+        if (!point || !Array.isArray(stations) || !stations.length) return null;
+        return stations.reduce((best, station) => {
+          const distance = distanceKm(point.lat, point.lon, station.lat, station.lon);
+          if (!best || distance < best.distanceKm) return { ...station, distanceKm: distance };
+          return best;
+        }, null);
+      }
+
+      function setTideStation(station, mode) {
+        currentTideStation = station;
+        els.tideStation.value = station.id;
+        const distance = Number.isFinite(station.distanceKm) ? `，距离约 ${station.distanceKm.toFixed(1)} km` : "";
+        els.tideStationInfo.textContent = `${mode}：${station.name} (${station.id})${distance}。不同海岸会匹配不同潮汐站。`;
+      }
+
+      function distanceKm(lat1, lon1, lat2, lon2) {
+        const toRad = (value) => (value * Math.PI) / 180;
+        const earth = 6371;
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+        return earth * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      }
+
+      async function fetchTides() {
+        const matchedStation = await resolveNearestTideStation();
+        const station = matchedStation?.id || els.tideStation.value.trim() || "8516945";
+        const start = new Date();
+        const end = new Date(start.getTime() + 48 * 60 * 60 * 1000);
+        const common = new URLSearchParams({
+          begin_date: ymd(start),
+          end_date: ymd(end),
+          station,
+          product: "predictions",
+          datum: "MLLW",
+          time_zone: "lst_ldt",
+          units: "metric",
+          application: "FishingWeatherMVP",
+          format: "json",
+        });
+        const seriesUrl = `${NOAA_URL}?${common.toString()}&interval=30`;
+        const hiloUrl = `${NOAA_URL}?${common.toString()}&interval=hilo`;
+        const [seriesRes, hiloRes] = await Promise.all([fetch(seriesUrl), fetch(hiloUrl)]);
+        if (!seriesRes.ok || !hiloRes.ok) {
+          throw new Error("NOAA 潮汐接口失败。");
+        }
+        const [seriesJson, hiloJson] = await Promise.all([seriesRes.json(), hiloRes.json()]);
+        if (seriesJson.error || hiloJson.error) {
+          throw new Error("NOAA 潮汐站或日期参数无效。");
+        }
+        return {
+          series: (seriesJson.predictions || []).map((p) => ({ time: new Date(p.t.replace(" ", "T")), value: Number(p.v) })),
+          highLow: (hiloJson.predictions || []).map((p) => ({
+            time: new Date(p.t.replace(" ", "T")),
+            value: Number(p.v),
+            type: p.type,
+          })),
+        };
+      }
+
+      function ymd(date) {
+        return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+      }
+
+      function makeDemoForecast() {
+        const now = new Date();
+        return Array.from({ length: 56 }, (_, index) => {
+          const t = new Date(now.getTime() + index * 3 * 60 * 60 * 1000);
+          const daily = Math.sin((index / 8) * Math.PI);
+          return {
+            time: t,
+            wind: 3.8 + Math.max(0, daily) * 2.8 + Math.sin(index * 0.7),
+            gust: 6.2 + Math.max(0, daily) * 4.2,
+            windDir: 120 + Math.sin(index / 3) * 45,
+            pressure: 1011.5 + Math.sin(index / 6) * 3 + index * 0.05,
+            temp: 19 + Math.max(0, daily) * 4,
+            rh: 62 + Math.sin(index / 2) * 12,
+            precip: index % 9 === 0 ? 0.6 : 0,
+            wave: 0.28 + Math.max(0, daily) * 0.35,
+            wavePeriod: 4.5 + Math.sin(index / 4),
+            swell: 0.18 + Math.max(0, daily) * 0.2,
+            swellPeriod: 5.8,
+          };
+        });
+      }
+
+      function makeDemoSunEvents() {
+        const today = new Date();
+        const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+        return [today, tomorrow].flatMap((day) => {
+          const sunrise = new Date(day);
+          sunrise.setHours(5, 23, 0, 0);
+          const sunset = new Date(day);
+          sunset.setHours(20, 28, 0, 0);
+          return [
+            { type: "sunrise", time: sunrise },
+            { type: "sunset", time: sunset },
+          ];
+        });
+      }
+
+      function makeDemoTideSeries() {
+        const now = new Date();
+        return Array.from({ length: 97 }, (_, index) => {
+          const time = new Date(now.getTime() + index * 30 * 60 * 1000);
+          return { time, value: 1.0 + Math.sin((index / 12.4) * Math.PI) * 0.9 };
+        });
+      }
+
+      function inferHighLow(series) {
+        const out = [];
+        for (let i = 1; i < series.length - 1; i += 1) {
+          if (series[i].value > series[i - 1].value && series[i].value > series[i + 1].value) {
+            out.push({ ...series[i], type: "H" });
+          }
+          if (series[i].value < series[i - 1].value && series[i].value < series[i + 1].value) {
+            out.push({ ...series[i], type: "L" });
+          }
+        }
+        return out.slice(0, 8);
+      }
+
+      function renderAll(isDemo) {
+        const analysis = analyzeFishing(forecastRows, tideHighLow);
+        renderScore(analysis);
+        renderMetrics(selectedForecastRow() || forecastRows[0]);
+        renderHourlyAdvice();
+        renderSelectedScore();
+        renderForecastTable();
+        drawTideChart();
+        renderGoldenWindows();
+        els.sourceNote.textContent = isDemo
+          ? "数据源：天气为演示数据；潮汐来自 NOAA CO-OPS。Open-Meteo 或 NOAA 不可用时自动切换演示。"
+          : "数据源：Open-Meteo Weather & Marine、NOAA CO-OPS tide predictions。";
+      }
+
+      function analyzeFishing(rows, events) {
+        const now = rows[0] || {};
+        const pressure = now.pressure;
+        const pressureLater = rows[4] ? rows[4].pressure : pressure;
+        const pressureTrend = Number.isFinite(pressureLater) && Number.isFinite(pressure) ? pressureLater - pressure : 0;
+        const wave = Number.isFinite(now.wave) ? now.wave : 0.3;
+        const gust = Number.isFinite(now.gust) ? now.gust : 0;
+        const wind = Number.isFinite(now.wind) ? now.wind : 0;
+        const precip = Number.isFinite(now.precip) ? now.precip : 0;
+
+        let score = 62;
+        const pills = [];
+        if (pressure >= 1010 && pressure <= 1015) {
+          score += 12;
+          pills.push(["气压甜区", "good"]);
+        } else if (pressure < 1006 || pressure > 1023) {
+          score -= 8;
+          pills.push(["气压偏离", "warn"]);
+        }
+        if (pressureTrend > 0.8) {
+          score += 10;
+          pills.push(["气压上升", "good"]);
+        } else if (pressureTrend < -1.2) {
+          score -= 12;
+          pills.push(["气压下降", "bad"]);
+        }
+        if (wind >= 2 && wind <= 7) {
+          score += 8;
+          pills.push(["风力合适", "good"]);
+        } else if (wind > 9) {
+          score -= 10;
+          pills.push(["风大", "warn"]);
+        }
+        if (gust > 12) {
+          score -= 10;
+          pills.push(["阵风强", "bad"]);
+        }
+        if (wave <= 0.6) {
+          score += 7;
+          pills.push(["浪小", "good"]);
+        } else if (wave > 1.2) {
+          score -= 15;
+          pills.push(["浪高", "bad"]);
+        }
+        if (precip > 1) {
+          score -= 8;
+          pills.push(["有降雨", "warn"]);
+        }
+        if (isNearGoldenWindow(events)) {
+          score += 8;
+          pills.push(["潮汐窗口", "good"]);
+        }
+
+        score = Math.max(0, Math.min(100, Math.round(score)));
+        const title = score >= 82 ? "爆护窗口" : score >= 68 ? "适合作钓" : score >= 50 ? "谨慎出钓" : "不建议硬冲";
+        return {
+          score,
+          title,
+          summary: `风 ${formatValue(wind, 1)} m/s，气压 ${formatValue(pressure, 1)} hPa，浪高 ${formatValue(wave, 2)} m。`,
+          pills,
+        };
+      }
+
+      function isNearGoldenWindow(events) {
+        const now = Date.now();
+        return goldenWindows(events).some((w) => now >= w.start.getTime() && now <= w.end.getTime());
+      }
+
+      function goldenWindows(events) {
+        return events
+          .slice(0, 10)
+          .map((event) => {
+            if (event.type === "H") {
+              return {
+                label: "满潮前 2 小时",
+                tide: event,
+                start: new Date(event.time.getTime() - 2 * 60 * 60 * 1000),
+                end: event.time,
+              };
+            }
+            return {
+              label: "枯潮后 2 小时",
+              tide: event,
+              start: event.time,
+              end: new Date(event.time.getTime() + 2 * 60 * 60 * 1000),
+            };
+          })
+          .filter((w) => w.end.getTime() > Date.now() - 60 * 60 * 1000)
+          .filter(isDisplayableGoldenWindow)
+          .slice(0, 5);
+      }
+
+      function isDisplayableGoldenWindow(window) {
+        return window.end.getHours() >= 5;
+      }
+
+      function renderScore(analysis) {
+        const degrees = Math.round((analysis.score / 100) * 360);
+        const color = analysis.score >= 75 ? "var(--good)" : analysis.score >= 55 ? "var(--warn)" : "var(--bad)";
+        els.scoreRing.style.background = `conic-gradient(${color} 0deg, ${color} ${degrees}deg, #dde6ee ${degrees}deg)`;
+        els.scoreValue.textContent = analysis.score;
+        els.scoreTitle.textContent = analysis.title;
+        els.scoreSummary.textContent = analysis.summary;
+        els.scorePills.innerHTML = analysis.pills.map(([text, tone]) => `<span class="pill ${tone}">${text}</span>`).join("");
+      }
+
+      function renderSelectedScore() {
+        const item = hourlyScores[selectedHourlyIndex];
+        if (!item) {
+          renderScore(analyzeFishing(forecastRows, tideHighLow));
+          return;
+        }
+        const titleMap = {
+          强推: "爆护窗口",
+          适合: "适合作钓",
+          可试: "可以试钓",
+          谨慎: "谨慎出钓",
+        };
+        renderScore({
+          score: item.result.score,
+          title: titleMap[item.result.title] || item.result.title,
+          summary: `所选 ${formatDateTime(item.row.time)}：${item.result.summary}`,
+          pills: item.result.pills,
+        });
+      }
+
+      function renderMetrics(row) {
+        if (!row) return;
+        els.nowWind.textContent = `${formatValue(row.wind, 1)} m/s ${windDirName(row.windDir)}`;
+        els.nowPressure.textContent = Number.isFinite(row.pressure) ? `${row.pressure.toFixed(1)} hPa` : "--";
+        els.nowWave.textContent = Number.isFinite(row.wave) ? `${row.wave.toFixed(2)} m` : "--";
+        els.nowRain.textContent = Number.isFinite(row.precip) ? `${row.precip.toFixed(row.precip >= 1 ? 1 : 2)} mm` : "--";
+      }
+
+      function renderGoldenWindows() {
+        if (!els.goldenList) return;
+        const windows = goldenWindows(tideHighLow);
+        els.goldenList.innerHTML = windows.length
+          ? windows
+              .map(
+                (w) => `<div class="golden-item"><strong>${formatTime(w.start)}-${formatTime(w.end)}</strong><span>${w.label}，${w.tide.type === "H" ? "满潮" : "干潮"} ${formatDateTime(w.tide.time)}，水位 ${w.tide.value.toFixed(2)} m</span></div>`,
+              )
+              .join("")
+          : '<p class="hint">暂无潮汐窗口。</p>';
+      }
+
+      function renderForecastTable() {
+        const rows = forecastRows.slice(hourlyWindowStartIndex, hourlyWindowStartIndex + 24);
+        if (!rows.length) {
+          els.forecastTable.innerHTML = '<p class="hint">更新预报后显示逐小时风向、风级和时间。</p>';
+          return;
+        }
+        const columns = `92px repeat(${rows.length}, minmax(46px, 1fr))`;
+        const cell = (row, index, className, content, extra = "") => {
+          const selected = index === selectedHourlyIndex ? " selected" : "";
+          return `<div class="hourly-wind-cell ${className}${selected}" ${extra}>${content}</div>`;
+        };
+        const dateGroups = [];
+        rows.forEach((row) => {
+          const key = row.time.toDateString();
+          const current = dateGroups[dateGroups.length - 1];
+          if (current && current.key === key) current.count += 1;
+          else dateGroups.push({ key, count: 1, date: row.time });
+        });
+        const dateCells = dateGroups
+          .map((group) => `<div class="hourly-wind-cell date" style="grid-column: span ${group.count}">${formatWeekDate(group.date)}</div>`)
+          .join("");
+        const timeCells = rows
+          .map((row, index) => {
+            const label = formatTime(row.time).replace(":00", "");
+            return cell(row, index, "time", `<span>${label}</span>`);
+          })
+          .join("");
+        const iconCells = rows.map((row, index) => cell(row, index, "icon", weatherIcon(row))).join("");
+        const tempCells = rows.map((row, index) => cell(row, index, "temp", `${tempF(row.temp)}°`)).join("");
+        const rainCells = rows
+          .map((row, index) => {
+            const rain = Number.isFinite(row.precip) && row.precip > 0 ? row.precip.toFixed(row.precip >= 1 ? 1 : 2) : "";
+            return cell(row, index, "rain", rain ? `💧${rain}` : "");
+          })
+          .join("");
+        const speedCells = rows
+          .map((row, index) => cell(row, index, "speed", windForceLevel(row.wind), `style="background:${windSpeedColor(row.wind)}"`))
+          .join("");
+        const gustCells = rows
+          .map((row, index) => cell(row, index, "gust", windForceLevel(row.gust), `style="background:${windSpeedColor(row.gust)}"`))
+          .join("");
+        const dirCells = rows
+          .map((row, index) => {
+            const rotation = Number.isFinite(row.windDir) ? row.windDir + 90 : 0;
+            const title = `${windDirName(row.windDir)} ${formatValue(row.wind, 1)} m/s`;
+            return cell(row, index, "dir", `<span class="wind-arrow" style="transform: rotate(${rotation}deg)" title="${title}">➜</span>`);
+          })
+          .join("");
+        const now = Date.now();
+        const firstTime = rows[0].time.getTime();
+        const lastTime = rows[rows.length - 1].time.getTime();
+        const nowLine =
+          now >= firstTime && now <= lastTime
+            ? `<div class="hourly-now-line" style="left: calc(92px + ((100% - 92px) * ${((now - firstTime) / Math.max(1, lastTime - firstTime)).toFixed(5)}))"></div>`
+            : "";
+        els.forecastTable.innerHTML = `
+          <div class="hourly-wind-board">
+            <div class="hourly-wind-grid" style="grid-template-columns:${columns}">
+              ${nowLine}
+              <div class="hourly-wind-label"></div>${dateCells}
+              <div class="hourly-wind-label">时间</div>${timeCells}
+              <div class="hourly-wind-label">天气</div>${iconCells}
+              <div class="hourly-wind-label">温度 °F</div>${tempCells}
+              <div class="hourly-wind-label">雨 mm</div>${rainCells}
+              <div class="hourly-wind-label">风级 bft</div>${speedCells}
+              <div class="hourly-wind-label">阵风 bft</div>${gustCells}
+              <div class="hourly-wind-label">风向</div>${dirCells}
+            </div>
+          </div>
+        `;
+      }
+
+      function renderHourlyAdvice() {
+        const maxStart = Math.max(0, forecastRows.length - 24);
+        hourlyWindowStartIndex = Math.max(0, Math.min(hourlyWindowStartIndex, maxStart));
+        hourlyScores = forecastRows.slice(hourlyWindowStartIndex, hourlyWindowStartIndex + 24).map((row, index) => {
+          const sourceIndex = hourlyWindowStartIndex + index;
+          const previous = sourceIndex > 0 ? forecastRows[sourceIndex - 1] : null;
+          const next = forecastRows[sourceIndex + 1] || null;
+          const trendBase = previous || next || row;
+          const pressureTrend = Number.isFinite(row.pressure) && Number.isFinite(trendBase.pressure) ? row.pressure - trendBase.pressure : 0;
+          const golden = isTimeInGoldenWindow(row.time);
+          return {
+            row,
+            result: analyzeHour(row, pressureTrend, golden),
+          };
+        });
+        selectedHourlyIndex = Math.min(selectedHourlyIndex, Math.max(0, hourlyScores.length - 1));
+        syncHourlyTimeInput();
+        drawHourlyScoreChart();
+        renderHourlyScoreDetail();
+      }
+
+      function syncHourlyTimeInput() {
+        const row = hourlyScores[selectedHourlyIndex]?.row || forecastRows[hourlyWindowStartIndex];
+        if (!row) return;
+        els.hourlyTimeInput.value = toDateTimeLocalValue(row.time);
+      }
+
+      function toDateTimeLocalValue(date) {
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+      }
+
+      function drawHourlyScoreChart() {
+        const canvas = els.hourlyScoreChart;
+        const ctx = canvas.getContext("2d");
+        const width = canvas.width;
+        const height = canvas.height;
+        ctx.clearRect(0, 0, width, height);
+        drawFrame(ctx, width, height);
+        if (!hourlyScores.length) {
+          drawCentered(ctx, width, height, "等待预报");
+          return;
+        }
+
+        const pad = { l: 42, r: 18, t: 34, b: 38 };
+        const xForIndex = (index) => pad.l + (index / Math.max(1, hourlyScores.length - 1)) * (width - pad.l - pad.r);
+        const yForScore = (score) => height - pad.b - (score / 100) * (height - pad.t - pad.b);
+        const firstTime = hourlyScores[0].row.time.getTime();
+        const lastTime = hourlyScores[hourlyScores.length - 1].row.time.getTime();
+        const xForTime = (time) => pad.l + ((time.getTime() - firstTime) / Math.max(1, lastTime - firstTime)) * (width - pad.l - pad.r);
+        const visibleTide = tideSeries.filter((point) => point.time.getTime() >= firstTime && point.time.getTime() <= lastTime);
+        const tideValues = visibleTide.map((point) => point.value).filter(Number.isFinite);
+        const tideMin = tideValues.length ? Math.min(...tideValues) : 0;
+        const tideMax = tideValues.length ? Math.max(...tideValues) : 1;
+        const tideSpan = tideMax - tideMin || 1;
+        const yForTide = (value) => height - pad.b - ((value - tideMin) / tideSpan) * (height - pad.t - pad.b);
+
+        const gradient = ctx.createLinearGradient(0, pad.t, 0, height - pad.b);
+        gradient.addColorStop(0, "rgba(21, 128, 61, 0.28)");
+        gradient.addColorStop(0.5, "rgba(245, 158, 11, 0.16)");
+        gradient.addColorStop(1, "rgba(185, 28, 28, 0.12)");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(pad.l, pad.t, width - pad.l - pad.r, height - pad.t - pad.b);
+
+        goldenWindows(tideHighLow).forEach((window) => {
+          const startTime = window.start.getTime();
+          const endTime = window.end.getTime();
+          if (endTime < firstTime || startTime > lastTime) return;
+          const startX = Math.max(pad.l, xForTime(new Date(Math.max(startTime, firstTime))));
+          const endX = Math.min(width - pad.r, xForTime(new Date(Math.min(endTime, lastTime))));
+          ctx.fillStyle = "rgba(245, 184, 0, 0.2)";
+          ctx.fillRect(startX, pad.t, Math.max(1, endX - startX), height - pad.t - pad.b);
+          ctx.strokeStyle = "rgba(217, 139, 0, 0.72)";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(startX, pad.t);
+          ctx.lineTo(startX, height - pad.b);
+          ctx.moveTo(endX, pad.t);
+          ctx.lineTo(endX, height - pad.b);
+          ctx.stroke();
+        });
+
+        drawSunMarkers(ctx, pad, width, height, firstTime, lastTime, xForTime);
+
+        if (visibleTide.length > 1) {
+          ctx.beginPath();
+          visibleTide.forEach((point, index) => {
+            const x = xForTime(point.time);
+            const y = yForTide(point.value);
+            if (index === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = "#0f6f82";
+          ctx.stroke();
+        }
+
+        hourlyScores.slice(1).forEach((item, index) => {
+          const prev = hourlyScores[index];
+          ctx.strokeStyle = scoreColor((prev.result.score + item.result.score) / 2);
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(xForIndex(index), yForScore(prev.result.score));
+          ctx.lineTo(xForIndex(index + 1), yForScore(item.result.score));
+          ctx.stroke();
+        });
+
+        hourlyScores.forEach((item, index) => {
+          const x = xForIndex(index);
+          const y = yForScore(item.result.score);
+          ctx.fillStyle = scoreColor(item.result.score);
+          ctx.beginPath();
+          ctx.arc(x, y, index === selectedHourlyIndex ? 6 : 4, 0, Math.PI * 2);
+          ctx.fill();
+          if (index === selectedHourlyIndex) {
+            ctx.strokeStyle = "#17212f";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+        });
+
+        const selected = hourlyScores[selectedHourlyIndex];
+        if (selected) {
+          const selectedX = xForIndex(selectedHourlyIndex);
+          ctx.strokeStyle = "rgba(37, 99, 235, 0.84)";
+          ctx.lineWidth = 1.8;
+          ctx.setLineDash([4, 5]);
+          ctx.beginPath();
+          ctx.moveTo(selectedX, pad.t);
+          ctx.lineTo(selectedX, height - pad.b);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        const now = Date.now();
+        if (now >= firstTime && now <= lastTime) {
+          const nowX = xForTime(new Date(now));
+          ctx.strokeStyle = "rgba(232, 109, 47, 0.84)";
+          ctx.lineWidth = 1.8;
+          ctx.setLineDash([6, 5]);
+          ctx.beginPath();
+          ctx.moveTo(nowX, pad.t);
+          ctx.lineTo(nowX, height - pad.b);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        ctx.font = "bold 12px system-ui";
+        ctx.textAlign = "start";
+        ctx.strokeStyle = "#0f6f82";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(pad.l, 17);
+        ctx.lineTo(pad.l + 22, 17);
+        ctx.stroke();
+        ctx.fillStyle = "#25405f";
+        ctx.fillText("潮汐", pad.l + 28, 21);
+        ctx.strokeStyle = "#65a30d";
+        ctx.beginPath();
+        ctx.moveTo(pad.l + 78, 17);
+        ctx.lineTo(pad.l + 100, 17);
+        ctx.stroke();
+        ctx.fillText("作钓指数", pad.l + 106, 21);
+        ctx.fillStyle = "#8a5100";
+        ctx.fillRect(pad.l + 184, 11, 18, 12);
+        ctx.fillText("黄金窗口", pad.l + 208, 21);
+
+        ctx.fillStyle = "#607086";
+        ctx.font = "18px system-ui";
+        ctx.textAlign = "center";
+        hourlyScores.forEach((item, index) => {
+          if (index % 4 !== 0 && index !== hourlyScores.length - 1) return;
+          ctx.fillText(formatTime(item.row.time), xForIndex(index), height - 10);
+        });
+        ctx.textAlign = "start";
+      }
+
+      function drawSunMarkers(ctx, pad, width, height, firstTime, lastTime, xForTime) {
+        sunEvents
+          .filter((event) => event.time.getTime() >= firstTime && event.time.getTime() <= lastTime)
+          .forEach((event) => {
+            const x = xForTime(event.time);
+            const y = pad.t + 17;
+            ctx.strokeStyle = event.type === "sunrise" ? "rgba(202, 138, 4, 0.78)" : "rgba(194, 65, 12, 0.78)";
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 5]);
+            ctx.beginPath();
+            ctx.moveTo(x, pad.t + 4);
+            ctx.lineTo(x, height - pad.b);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            drawSunIcon(ctx, x, y, event.type);
+            ctx.fillStyle = event.type === "sunrise" ? "#8a5a00" : "#9a3412";
+            ctx.font = "bold 12px system-ui";
+            ctx.textAlign = "center";
+            ctx.fillText(event.type === "sunrise" ? "日出" : "日落", x, y + 24);
+            ctx.fillStyle = "#607086";
+            ctx.font = "11px system-ui";
+            ctx.fillText(formatTime(event.time), x, y + 38);
+          });
+        ctx.textAlign = "start";
+      }
+
+      function drawSunIcon(ctx, x, y, type) {
+        const sunColor = type === "sunrise" ? "#f6b21a" : "#e86d2f";
+        const horizonColor = type === "sunrise" ? "#15803d" : "#7c2d12";
+        ctx.save();
+        ctx.strokeStyle = sunColor;
+        ctx.fillStyle = sunColor;
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 8; i += 1) {
+          const angle = (i / 8) * Math.PI * 2;
+          const inner = 9;
+          const outer = 14;
+          ctx.beginPath();
+          ctx.moveTo(x + Math.cos(angle) * inner, y + Math.sin(angle) * inner);
+          ctx.lineTo(x + Math.cos(angle) * outer, y + Math.sin(angle) * outer);
+          ctx.stroke();
+        }
+        ctx.beginPath();
+        ctx.arc(x, y, 7, Math.PI, 0);
+        ctx.fill();
+        ctx.strokeStyle = horizonColor;
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(x - 15, y);
+        ctx.lineTo(x + 15, y);
+        ctx.stroke();
+        ctx.fillStyle = horizonColor;
+        ctx.font = "bold 11px system-ui";
+        ctx.textAlign = "center";
+        ctx.fillText(type === "sunrise" ? "↑" : "↓", x, y - 11);
+        ctx.restore();
+      }
+
+      function scoreColor(score) {
+        if (score >= 82) return "#15803d";
+        if (score >= 68) return "#65a30d";
+        if (score >= 52) return "#d97706";
+        return "#b91c1c";
+      }
+
+      function renderHourlyScoreDetail() {
+        if (!hourlyScores.length) {
+          els.hourlyScoreDetail.innerHTML = '<h3>小时详情</h3><p class="hint">更新预报后，点击曲线上的点查看风、气压、浪高和建议。</p>';
+          return;
+        }
+        const item = hourlyScores[selectedHourlyIndex] || hourlyScores[0];
+        const { row, result } = item;
+        const pillHtml = result.pills.map(([text, tone]) => `<span class="pill ${tone}">${text}</span>`).join("");
+        els.hourlyScoreDetail.innerHTML = `
+          <div class="hourly-advice-head">
+            <h3>${formatDateTime(row.time)}</h3>
+            <span class="pill ${result.tone}">${result.title} ${result.score}</span>
+          </div>
+          <div class="pill-row">${pillHtml}</div>
+          <p class="hint">${result.summary}</p>`;
+        renderMetrics(row);
+        renderSelectedScore();
+      }
+
+      function selectHourlyScore(event) {
+        updateHourlyScoreFromClientX(event.clientX);
+      }
+
+      function startHourlyScoreDrag(event) {
+        if (!hourlyScores.length) return;
+        isDraggingHourlyScore = true;
+        hourlyDragState = {
+          startX: event.clientX,
+          lastShift: 0,
+          didPan: false,
+          startWindow: hourlyWindowStartIndex,
+          startSelected: selectedHourlyIndex,
+        };
+        els.hourlyScoreChart.classList.add("dragging");
+        els.hourlyScoreChart.setPointerCapture?.(event.pointerId);
+        event.preventDefault();
+      }
+
+      function dragHourlyScore(event) {
+        if (!isDraggingHourlyScore) return;
+        panHourlyWindowFromDrag(event.clientX);
+        event.preventDefault();
+      }
+
+      function stopHourlyScoreDrag(event) {
+        if (!isDraggingHourlyScore) return;
+        const shouldSelect = !hourlyDragState?.didPan;
+        isDraggingHourlyScore = false;
+        els.hourlyScoreChart.classList.remove("dragging");
+        els.hourlyScoreChart.releasePointerCapture?.(event.pointerId);
+        if (shouldSelect) updateHourlyScoreFromClientX(event.clientX);
+        hourlyDragState = null;
+      }
+
+      function panHourlyWindowFromDrag(clientX) {
+        if (!hourlyDragState || !forecastRows.length) return;
+        const rect = els.hourlyScoreChart.getBoundingClientRect();
+        const hoursPerWindow = Math.max(1, hourlyScores.length - 1);
+        const pixelsPerHour = Math.max(12, rect.width / hoursPerWindow);
+        const deltaX = clientX - hourlyDragState.startX;
+        const hourShift = Math.trunc(deltaX / pixelsPerHour);
+        if (Math.abs(deltaX) < 12 || hourShift === hourlyDragState.lastShift) return;
+        const maxStart = Math.max(0, forecastRows.length - 24);
+        const nextStart = Math.max(0, Math.min(maxStart, hourlyDragState.startWindow - hourShift));
+        if (nextStart === hourlyWindowStartIndex) return;
+        const selectedAbsolute = hourlyDragState.startWindow + hourlyDragState.startSelected;
+        hourlyWindowStartIndex = nextStart;
+        selectedHourlyIndex = Math.max(0, Math.min(23, selectedAbsolute - hourlyWindowStartIndex));
+        hourlyDragState.lastShift = hourShift;
+        hourlyDragState.didPan = true;
+        renderHourlyAdvice();
+        renderForecastTable();
+        drawTideChart();
+        seedWindParticles();
+      }
+
+      function updateHourlyScoreFromClientX(clientX) {
+        if (!hourlyScores.length) return;
+        const rect = els.hourlyScoreChart.getBoundingClientRect();
+        const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        selectedHourlyIndex = Math.max(0, Math.min(hourlyScores.length - 1, Math.round(ratio * (hourlyScores.length - 1))));
+        syncHourlyTimeInput();
+        drawHourlyScoreChart();
+        renderHourlyScoreDetail();
+        renderForecastTable();
+        drawTideChart();
+        seedWindParticles();
+      }
+
+      function jumpHourlyWindow(daysFromToday) {
+        if (!forecastRows.length) {
+          setStatus("请先更新预报，再切换作钓曲线时间。", "warning");
+          return;
+        }
+        const target = new Date();
+        target.setDate(target.getDate() + daysFromToday);
+        target.setHours(0, 0, 0, 0);
+        setHourlyWindowByTime(target);
+      }
+
+      function jumpToSpecifiedHourlyTime() {
+        if (!forecastRows.length) {
+          setStatus("请先更新预报，再跳转指定时间。", "warning");
+          return;
+        }
+        const target = new Date(els.hourlyTimeInput.value);
+        if (Number.isNaN(target.getTime())) {
+          setStatus("请选择有效的日期时间。", "warning");
+          return;
+        }
+        setHourlyWindowByTime(target);
+      }
+
+      function setHourlyWindowByTime(target) {
+        const nearestIndex = nearestForecastIndex(target);
+        const maxStart = Math.max(0, forecastRows.length - 24);
+        hourlyWindowStartIndex = Math.max(0, Math.min(maxStart, nearestIndex - 6));
+        selectedHourlyIndex = Math.max(0, Math.min(23, nearestIndex - hourlyWindowStartIndex));
+        renderHourlyAdvice();
+        renderForecastTable();
+        drawTideChart();
+        seedWindParticles();
+        const selected = hourlyScores[selectedHourlyIndex]?.row;
+        setStatus(selected ? `已切换曲线到 ${formatDateTime(selected.time)}。` : "已切换曲线时间。", "good");
+      }
+
+      function nearestForecastIndex(target) {
+        let bestIndex = 0;
+        let bestDelta = Infinity;
+        forecastRows.forEach((row, index) => {
+          const delta = Math.abs(row.time.getTime() - target.getTime());
+          if (delta < bestDelta) {
+            bestDelta = delta;
+            bestIndex = index;
+          }
+        });
+        return bestIndex;
+      }
+
+      function analyzeHour(row, pressureTrend, golden) {
+        let score = 58;
+        const pills = [];
+        const wind = Number.isFinite(row.wind) ? row.wind : 0;
+        const gust = Number.isFinite(row.gust) ? row.gust : 0;
+        const pressure = row.pressure;
+        const wave = Number.isFinite(row.wave) ? row.wave : 0;
+        const precip = Number.isFinite(row.precip) ? row.precip : 0;
+
+        if (Number.isFinite(pressure) && pressure >= 1010 && pressure <= 1015) {
+          score += 10;
+          pills.push(["气压甜区", "good"]);
+        } else if (Number.isFinite(pressure) && (pressure < 1006 || pressure > 1023)) {
+          score -= 7;
+          pills.push(["气压偏离", "warn"]);
+        }
+
+        if (pressureTrend > 0.25) {
+          score += 8;
+          pills.push(["气压上升", "good"]);
+        } else if (pressureTrend < -0.35) {
+          score -= 9;
+          pills.push(["气压下滑", "bad"]);
+        } else {
+          pills.push(["气压平稳", ""]);
+        }
+
+        if (wind >= 2 && wind <= 7) {
+          score += 8;
+          pills.push(["风力合适", "good"]);
+        } else if (wind > 9) {
+          score -= 12;
+          pills.push(["风大控饵难", "warn"]);
+        } else if (wind < 1) {
+          score -= 3;
+          pills.push(["风弱水静", "warn"]);
+        }
+
+        if (gust > 12) {
+          score -= 10;
+          pills.push(["阵风风险", "bad"]);
+        }
+        if (wave <= 0.6) {
+          score += 6;
+          pills.push(["浪小安全", "good"]);
+        } else if (wave > 1.2) {
+          score -= 14;
+          pills.push(["浪高谨慎", "bad"]);
+        }
+        if (precip > 1) {
+          score -= 6;
+          pills.push(["有雨", "warn"]);
+        }
+        if (golden) {
+          score += 9;
+          pills.push(["潮汐金窗", "good"]);
+        }
+
+        score = Math.max(0, Math.min(100, Math.round(score)));
+        const title = score >= 82 ? "强推" : score >= 68 ? "适合" : score >= 52 ? "可试" : "谨慎";
+        const tone = score >= 72 ? "good" : score >= 52 ? "warn" : "bad";
+        const summary = `风 ${formatValue(wind, 1)} m/s ${windDirName(row.windDir)}，气压 ${formatValue(pressure, 1)} hPa，${pressureTrend >= 0 ? "较前小时 +" : "较前小时 "}${formatValue(pressureTrend, 1)} hPa，浪 ${formatValue(wave, 2)} m，雨 ${formatValue(precip, 2)} mm。`;
+        return { score, title, tone, pills, summary };
+      }
+
+      function isTimeInGoldenWindow(time) {
+        const target = time.getTime();
+        return goldenWindows(tideHighLow).some((window) => target >= window.start.getTime() && target <= window.end.getTime());
+      }
+
+      function forecastScoreForRow(row, index) {
+        if (!row) return null;
+        const previous = forecastRows[index - 1];
+        const next = forecastRows[index + 1];
+        const baseline = previous || next || row;
+        const pressureTrend =
+          Number.isFinite(row.pressure) && Number.isFinite(baseline.pressure)
+            ? row.pressure - baseline.pressure
+            : 0;
+        return analyzeHour(row, pressureTrend, isTimeInGoldenWindow(row.time));
+      }
+
+      function formatValue(value, digits = 1) {
+        return Number.isFinite(value) ? value.toFixed(digits) : "--";
+      }
+
+      function initWindParticles() {
+        const canvas = els.windParticles;
+        if (!canvas) return;
+        resizeWindCanvas();
+        seedWindParticles();
+        if (!windParticleResizeBound) {
+          window.addEventListener("resize", () => {
+            resizeWindCanvas();
+            seedWindParticles();
+          });
+          windParticleResizeBound = true;
+        }
+        if (!windParticleFrame) {
+          windParticleFrame = requestAnimationFrame(drawWindParticles);
+        }
+      }
+
+      function resizeWindCanvas() {
+        const canvas = els.windParticles;
+        const rect = els.mapCanvas.getBoundingClientRect();
+        const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+        canvas.width = Math.max(1, Math.round(rect.width * dpr));
+        canvas.height = Math.max(1, Math.round(rect.height * dpr));
+        canvas.dataset.dpr = String(dpr);
+      }
+
+      function seedWindParticles() {
+        const canvas = els.windParticles;
+        if (!canvas) return;
+        const dpr = Number(canvas.dataset.dpr || 1);
+        const width = canvas.width / dpr;
+        const height = canvas.height / dpr;
+        const count = Math.max(90, Math.min(420, Math.round((width * height) / 2600)));
+        windParticles = Array.from({ length: count }, () => makeWindParticle(width, height, true));
+      }
+
+      function makeWindParticle(width, height, randomAge = false) {
+        const speedScale = windParticleSpeedScale(currentWindSample().speed);
+        return {
+          x: Math.random() * width,
+          y: Math.random() * height,
+          age: randomAge ? Math.random() * (70 / speedScale.lifeFactor) : 0,
+          life: 52 / speedScale.lifeFactor + Math.random() * (84 / speedScale.lifeFactor),
+          speedBias: 0.78 + Math.random() * 0.58,
+        };
+      }
+
+      function selectedForecastRow() {
+        return hourlyScores[selectedHourlyIndex]?.row || forecastRows[hourlyWindowStartIndex + selectedHourlyIndex] || forecastRows[0] || null;
+      }
+
+      function currentWindSample() {
+        const selected = selectedForecastRow();
+        const row = selected && (Number.isFinite(selected.windDir) || Number.isFinite(selected.wind))
+          ? selected
+          : forecastRows.find((item) => Number.isFinite(item.windDir) || Number.isFinite(item.wind)) || {};
+        return {
+          direction: Number.isFinite(row.windDir) ? row.windDir : 285,
+          speed: Number.isFinite(row.wind) ? row.wind : 4.5,
+          gust: Number.isFinite(row.gust) ? row.gust : 7,
+        };
+      }
+
+      function windVectorAt(x, y, width, height, elapsed) {
+        const sample = currentWindSample();
+        const baseHeading = ((sample.direction + 180) * Math.PI) / 180;
+        const angle = baseHeading;
+        const speedScale = windParticleSpeedScale(sample.speed);
+        const regionalPulse = 0.92 + Math.abs(Math.sin((x * 0.012 + y * 0.01 + elapsed / 3500) * 0.045)) * 0.18;
+        const gustPulse = 1 + Math.sin(elapsed / 1400 + (x / Math.max(width, 1)) * Math.PI) * Math.min(0.16, sample.gust / 90);
+        const velocity = speedScale.velocity * gustPulse * regionalPulse;
+        return {
+          x: Math.sin(angle) * velocity,
+          y: -Math.cos(angle) * velocity,
+        };
+      }
+
+      function windParticleSpeedScale(speed) {
+        const value = Number.isFinite(speed) ? speed : 4.5;
+        if (value < 0.3) return { level: 0, velocity: 0.32, lifeFactor: 0.72 };
+        if (value < 1.6) return { level: 1, velocity: 0.48, lifeFactor: 0.8 };
+        if (value < 3.4) return { level: 2, velocity: 0.72, lifeFactor: 0.9 };
+        if (value < 5.5) return { level: 3, velocity: 1.05, lifeFactor: 1 };
+        if (value < 8) return { level: 4, velocity: 1.5, lifeFactor: 1.12 };
+        if (value < 10.8) return { level: 5, velocity: 2.05, lifeFactor: 1.26 };
+        if (value < 13.9) return { level: 6, velocity: 2.72, lifeFactor: 1.45 };
+        if (value < 17.2) return { level: 7, velocity: 3.45, lifeFactor: 1.68 };
+        if (value < 20.8) return { level: 8, velocity: 4.15, lifeFactor: 1.95 };
+        return { level: 9, velocity: 4.85, lifeFactor: 2.25 };
+      }
+
+      function particleWindColor(speed, alpha = 1) {
+        const stops = [
+          { speed: 0, color: [0, 112, 70] },
+          { speed: 4, color: [38, 145, 40] },
+          { speed: 7, color: [169, 132, 0] },
+          { speed: 11, color: [188, 73, 16] },
+          { speed: 15, color: [150, 16, 24] },
+          { speed: 20, color: [236, 236, 226] },
+        ];
+        const clamped = Math.max(stops[0].speed, Math.min(stops[stops.length - 1].speed, speed));
+        const upper = stops.find((stop) => clamped <= stop.speed) || stops[stops.length - 1];
+        const upperIndex = stops.indexOf(upper);
+        const lower = stops[Math.max(0, upperIndex - 1)];
+        const span = upper.speed - lower.speed || 1;
+        const ratio = (clamped - lower.speed) / span;
+        const rgb = lower.color.map((channel, index) => Math.round(channel + (upper.color[index] - channel) * ratio));
+        return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha.toFixed(3)})`;
+      }
+
+      function drawWindParticles(timestamp) {
+        const canvas = els.windParticles;
+        if (!canvas) return;
+        const dpr = Number(canvas.dataset.dpr || 1);
+        const width = canvas.width / dpr;
+        const height = canvas.height / dpr;
+        const ctx = canvas.getContext("2d");
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.globalCompositeOperation = "destination-in";
+        ctx.fillStyle = "rgba(0, 0, 0, 0.88)";
+        ctx.fillRect(0, 0, width, height);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.lineCap = "round";
+        ctx.lineWidth = 1.85;
+        ctx.shadowBlur = 7;
+
+        windParticles.forEach((particle, index) => {
+          const sample = currentWindSample();
+          const vector = windVectorAt(particle.x, particle.y, width, height, timestamp || 0);
+          const lastX = particle.x;
+          const lastY = particle.y;
+          particle.x += vector.x * particle.speedBias;
+          particle.y += vector.y * particle.speedBias;
+          particle.age += 1;
+
+          const outOfBounds = particle.x < -30 || particle.x > width + 30 || particle.y < -30 || particle.y > height + 30;
+          if (outOfBounds || particle.age > particle.life) {
+            windParticles[index] = makeWindParticle(width, height, false);
+            return;
+          }
+
+          const ageAlpha = Math.max(0.18, 1 - particle.age / particle.life);
+          const localSpeed = sample.speed * (0.82 + Math.min(0.35, Math.hypot(vector.x, vector.y) / 7));
+          const alpha = ageAlpha * (0.74 + Math.min(0.22, localSpeed / 42));
+          const color = particleWindColor(localSpeed, alpha);
+          ctx.shadowColor = "rgba(13, 24, 34, 0.72)";
+          ctx.strokeStyle = color;
+          ctx.beginPath();
+          ctx.moveTo(lastX, lastY);
+          ctx.lineTo(particle.x, particle.y);
+          ctx.stroke();
+        });
+
+        ctx.shadowBlur = 0;
+
+        windParticleFrame = requestAnimationFrame(drawWindParticles);
+      }
+
+      function drawEmptyCharts() {
+        drawTideChart();
+      }
+
+      function drawTideChart(canvas = els.tideChart) {
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        const width = canvas.width;
+        const height = canvas.height;
+        ctx.clearRect(0, 0, width, height);
+        drawFrame(ctx, width, height);
+        if (!tideSeries.length) {
+          drawCentered(ctx, width, height, "等待潮汐");
+          return;
+        }
+        const large = width > 900;
+        const pad = large ? { l: 64, r: 28, t: 48, b: 82 } : { l: 46, r: 18, t: 32, b: 62 };
+        const values = tideSeries.map((d) => d.value).filter(Number.isFinite);
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const span = max - min || 1;
+        const firstTime = tideSeries[0].time.getTime();
+        const lastTime = tideSeries[tideSeries.length - 1].time.getTime();
+        const timeSpan = Math.max(1, lastTime - firstTime);
+        const xForTime = (date) => pad.l + ((date.getTime() - firstTime) / timeSpan) * (width - pad.l - pad.r);
+        const yForValue = (value) => height - pad.b - ((value - min) / span) * (height - pad.t - pad.b);
+        const yForScore = (score) => height - pad.b - (Math.max(0, Math.min(100, score)) / 100) * (height - pad.t - pad.b);
+        const valueForTime = (date) => {
+          const target = date.getTime();
+          for (let i = 1; i < tideSeries.length; i += 1) {
+            const prev = tideSeries[i - 1];
+            const next = tideSeries[i];
+            const prevTime = prev.time.getTime();
+            const nextTime = next.time.getTime();
+            if (target >= prevTime && target <= nextTime) {
+              const ratio = (target - prevTime) / Math.max(1, nextTime - prevTime);
+              return prev.value + (next.value - prev.value) * ratio;
+            }
+          }
+          return tideSeries.reduce((closest, point) => {
+            const currentDistance = Math.abs(point.time.getTime() - target);
+            const closestDistance = Math.abs(closest.time.getTime() - target);
+            return currentDistance < closestDistance ? point : closest;
+          }, tideSeries[0]).value;
+        };
+        const goldenLabels = [];
+
+        goldenWindows(tideHighLow).forEach((window) => {
+          const startX = Math.max(pad.l, xForTime(window.start));
+          const endX = Math.min(width - pad.r, xForTime(window.end));
+          if (endX <= pad.l || startX >= width - pad.r || endX <= startX) return;
+          ctx.fillStyle = "rgba(245, 184, 0, 0.24)";
+          ctx.fillRect(startX, pad.t, endX - startX, height - pad.t - pad.b);
+          ctx.strokeStyle = "rgba(217, 139, 0, 0.78)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(startX, pad.t);
+          ctx.lineTo(startX, height - pad.b);
+          ctx.moveTo(endX, pad.t);
+          ctx.lineTo(endX, height - pad.b);
+          ctx.stroke();
+          const midTime = new Date((window.start.getTime() + window.end.getTime()) / 2);
+          goldenLabels.push({
+            start: window.start,
+            end: window.end,
+            midX: startX + (endX - startX) / 2,
+            curveY: yForValue(valueForTime(midTime)),
+          });
+        });
+
+        ctx.beginPath();
+        ctx.lineWidth = large ? 4 : 3;
+        ctx.strokeStyle = "#0f6f82";
+        tideSeries.forEach((point, i) => {
+          const x = xForTime(point.time);
+          const y = yForValue(point.value);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        const scorePoints = forecastRows
+          .map((row, index) => ({ row, result: forecastScoreForRow(row, index) }))
+          .filter(({ row, result }) => result && row.time.getTime() >= firstTime && row.time.getTime() <= lastTime);
+        if (scorePoints.length > 1) {
+          ctx.save();
+          ctx.lineWidth = large ? 3.5 : 2.5;
+          scorePoints.slice(1).forEach((point, index) => {
+            const prev = scorePoints[index];
+            const x1 = xForTime(prev.row.time);
+            const y1 = yForScore(prev.result.score);
+            const x2 = xForTime(point.row.time);
+            const y2 = yForScore(point.result.score);
+            ctx.strokeStyle = scoreColor((prev.result.score + point.result.score) / 2);
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+          });
+          scorePoints.forEach((point, index) => {
+            if (index % (large ? 3 : 6) !== 0) return;
+            ctx.fillStyle = scoreColor(point.result.score);
+            ctx.beginPath();
+            ctx.arc(xForTime(point.row.time), yForScore(point.result.score), large ? 4.5 : 3.2, 0, Math.PI * 2);
+            ctx.fill();
+          });
+          ctx.restore();
+        }
+
+        ctx.save();
+        ctx.font = large ? "bold 15px system-ui" : "bold 11px system-ui";
+        ctx.textAlign = "start";
+        const legendY = large ? 22 : 17;
+        const legendX = pad.l;
+        ctx.strokeStyle = "#0f6f82";
+        ctx.lineWidth = large ? 4 : 3;
+        ctx.beginPath();
+        ctx.moveTo(legendX, legendY);
+        ctx.lineTo(legendX + (large ? 34 : 24), legendY);
+        ctx.stroke();
+        ctx.fillStyle = "#25405f";
+        ctx.fillText("潮汐", legendX + (large ? 42 : 31), legendY + (large ? 5 : 4));
+        const scoreLegendX = legendX + (large ? 104 : 74);
+        ctx.strokeStyle = "#65a30d";
+        ctx.lineWidth = large ? 4 : 3;
+        ctx.beginPath();
+        ctx.moveTo(scoreLegendX, legendY);
+        ctx.lineTo(scoreLegendX + (large ? 34 : 24), legendY);
+        ctx.stroke();
+        ctx.fillStyle = "#25405f";
+        ctx.fillText("作钓指数", scoreLegendX + (large ? 42 : 31), legendY + (large ? 5 : 4));
+        ctx.restore();
+
+        ctx.fillStyle = "#e86d2f";
+        tideHighLow.slice(0, 8).forEach((event) => {
+          const i = tideSeries.findIndex((p) => Math.abs(p.time - event.time) < 20 * 60 * 1000);
+          if (i < 0) return;
+          const x = xForTime(event.time);
+          const y = yForValue(event.value);
+          ctx.beginPath();
+          ctx.arc(x, y, large ? 7 : 5, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        goldenLabels.forEach((label) => {
+          const chartTop = pad.t;
+          const chartBottom = height - pad.b;
+          const chartMid = chartTop + (chartBottom - chartTop) / 2;
+          const boxWidth = large ? 138 : 88;
+          const boxHeight = large ? 56 : 40;
+          const gap = large ? 42 : 30;
+          let boxY = chartMid - boxHeight / 2;
+          if (Math.abs(label.curveY - chartMid) < boxHeight + gap / 2) {
+            boxY = label.curveY < chartMid ? label.curveY + gap : label.curveY - boxHeight - gap;
+          }
+          boxY = Math.min(Math.max(boxY, chartTop + 8), chartBottom - boxHeight - 8);
+          const boxX = Math.min(Math.max(label.midX - boxWidth / 2, pad.l + 4), width - pad.r - boxWidth - 4);
+          ctx.fillStyle = "rgba(255, 252, 242, 0.9)";
+          ctx.strokeStyle = "rgba(217, 139, 0, 0.45)";
+          ctx.lineWidth = 1;
+          ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+          ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
+          ctx.textAlign = "center";
+          ctx.fillStyle = "#8a5100";
+          ctx.font = large ? "15px system-ui" : "10px system-ui";
+          ctx.fillText(formatTime(label.start), boxX + boxWidth / 2, boxY + (large ? 23 : 16));
+          ctx.fillText(formatTime(label.end), boxX + boxWidth / 2, boxY + (large ? 43 : 31));
+          ctx.textAlign = "start";
+        });
+
+        const drawTimeMarker = (date, label, options) => {
+          const markerTime = date.getTime();
+          if (markerTime < firstTime || markerTime > lastTime) return;
+          const markerX = xForTime(date);
+          const labelWidth = large ? 62 : 44;
+          const labelHeight = large ? 24 : 18;
+          const labelX = Math.min(Math.max(markerX - labelWidth / 2, pad.l + 2), width - pad.r - labelWidth - 2);
+          const labelY = options.labelY;
+          ctx.save();
+          ctx.strokeStyle = options.line;
+          ctx.lineWidth = large ? 2.5 : 2;
+          ctx.setLineDash(options.dash || [6, 5]);
+          ctx.beginPath();
+          ctx.moveTo(markerX, pad.t);
+          ctx.lineTo(markerX, height - pad.b);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = options.bg;
+          ctx.strokeStyle = options.border;
+          ctx.lineWidth = 1;
+          ctx.fillRect(labelX, labelY, labelWidth, labelHeight);
+          ctx.strokeRect(labelX, labelY, labelWidth, labelHeight);
+          ctx.fillStyle = options.text;
+          ctx.font = large ? "bold 15px system-ui" : "bold 11px system-ui";
+          ctx.textAlign = "center";
+          ctx.fillText(label, labelX + labelWidth / 2, labelY + (large ? 17 : 13));
+          ctx.restore();
+        };
+
+        const now = Date.now();
+        drawTimeMarker(new Date(now), "现在", {
+          line: "rgba(232, 109, 47, 0.9)",
+          bg: "rgba(255, 247, 237, 0.94)",
+          border: "rgba(232, 109, 47, 0.45)",
+          text: "#9a3412",
+          labelY: pad.t + 5,
+        });
+        const selectedRow = selectedForecastRow();
+        if (selectedRow?.time) {
+          drawTimeMarker(selectedRow.time, "所选", {
+            line: "rgba(37, 99, 235, 0.88)",
+            bg: "rgba(239, 246, 255, 0.94)",
+            border: "rgba(37, 99, 235, 0.45)",
+            text: "#1d4ed8",
+            dash: [3, 5],
+            labelY: pad.t + (large ? 34 : 28),
+          });
+        }
+
+        const axisTicks = tideSeries.filter((_, index) => index % 12 === 0);
+        ctx.fillStyle = "#607086";
+        ctx.font = large ? "17px system-ui" : "12px system-ui";
+        ctx.textAlign = "center";
+        axisTicks.forEach((point) => {
+          const x = xForTime(point.time);
+          ctx.strokeStyle = "#d9e3ec";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x, height - pad.b);
+          ctx.lineTo(x, height - pad.b + 6);
+          ctx.stroke();
+          ctx.fillText(formatAxisDate(point.time), x, height - (large ? 42 : 31));
+          ctx.fillText(formatTime(point.time), x, height - (large ? 18 : 13));
+        });
+        ctx.textAlign = "start";
+      }
+
+      function openTideModal() {
+        els.tideModal.classList.add("open");
+        els.tideModal.setAttribute("aria-hidden", "false");
+        resizeLargeTideCanvas();
+        drawTideChart(els.tideChartLarge);
+      }
+
+      function closeTideModal() {
+        els.tideModal.classList.remove("open");
+        els.tideModal.setAttribute("aria-hidden", "true");
+      }
+
+      function resizeLargeTideCanvas() {
+        const canvas = els.tideChartLarge;
+        const rect = canvas.getBoundingClientRect();
+        const cssWidth = Math.max(760, Math.round(rect.width || 1120));
+        const cssHeight = Math.max(420, Math.round(rect.height || 620));
+        canvas.width = cssWidth;
+        canvas.height = cssHeight;
+      }
+
+      function drawFrame(ctx, width, height) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, width, height);
+        ctx.strokeStyle = "#e4ebf2";
+        ctx.lineWidth = 1;
+        for (let i = 1; i < 5; i += 1) {
+          const y = (height / 5) * i;
+          ctx.beginPath();
+          ctx.moveTo(38, y);
+          ctx.lineTo(width - 12, y);
+          ctx.stroke();
+        }
+      }
+
+      function drawCentered(ctx, width, height, text) {
+        ctx.fillStyle = "#607086";
+        ctx.font = "24px system-ui";
+        ctx.textAlign = "center";
+        ctx.fillText(text, width / 2, height / 2);
+        ctx.textAlign = "start";
+      }
+
+      async function copyCoordinates() {
+        const text = `${selectedPoint.lat.toFixed(6)}, ${selectedPoint.lon.toFixed(6)}`;
+        await navigator.clipboard.writeText(text);
+        setStatus(`已复制：${text}`, "good");
+      }
+
+      function clearKeys() {
+        localStorage.removeItem("weatherapi_key");
+        localStorage.removeItem("stormglass_key");
+        els.mapKey.value = "";
+        els.pointKey.value = "";
+        setStatus("已清除本地保存的备用 API key。");
+      }
+
+      function loadSpots() {
+        const saved = localStorage.getItem("fishing_spots_v1");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length) return parsed;
+          } catch {
+            localStorage.removeItem("fishing_spots_v1");
+          }
+        }
+        return [
+          {
+            id: crypto.randomUUID(),
+            owner: "海湾路亚笔记",
+            name: "Lloyd Harbor 北岸石堤",
+            lat: 40.908,
+            lon: -73.454,
+            visibility: "public",
+            targetFish: "Striped bass, bluefish",
+            bestWindow: "满潮前 2 小时，东南风 3-5m/s，夜间慢收",
+            notes: "春末到初夏看潮差和水温。小银色 minnow、白色 bucktail 有稳定表现，浪超过 1m 时不建议新手下石堤。",
+            followers: 128,
+            subscribers: 17,
+            followed: false,
+            subscribed: false,
+            views: 1420,
+            likes: 88,
+            saves: 36,
+            verified: 14,
+            posts: [
+              { tier: "free", text: "涨三分时鱼更贴边，先搜暗流交界再换慢速泳姿。" },
+              { tier: "paid", text: "深水槽坐标和夜钓站位图：潮位 0.7m 到 1.1m 之间命中率最高。" },
+            ],
+            catches: [
+              {
+                id: crypto.randomUUID(),
+                angler: "海湾路亚笔记",
+                species: "Striped bass",
+                size: "31in",
+                method: "白色 bucktail 慢跳",
+                notes: "满潮前 70 分钟，贴石堤外侧潮线。",
+                privacy: "public",
+                createdAt: new Date(Date.now() - 9 * 60 * 60 * 1000).toISOString(),
+              },
+              {
+                id: crypto.randomUUID(),
+                angler: "小陈",
+                species: "Bluefish",
+                size: "22in",
+                method: "银色 minnow",
+                notes: "日落后 20 分钟有一波追饵。",
+                privacy: "public",
+                createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+              },
+            ],
+            comments: [
+              { id: crypto.randomUUID(), author: "长岛阿明", text: "昨天按这个潮窗去，确实有口。", createdAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString() },
+            ],
+          },
+          {
+            id: crypto.randomUUID(),
+            owner: "老王海钓实验室",
+            name: "Kings Point 外侧潮线",
+            lat: 40.81,
+            lon: -73.765,
+            visibility: "paid",
+            targetFish: "Porgy, fluke",
+            bestWindow: "落潮后 90 分钟，底钓用小块 squid",
+            notes: "底质变化明显，轻铅找边。公开只展示大概区域，精确点位仅深度关注者可看。",
+            followers: 74,
+            subscribers: 9,
+            followed: false,
+            subscribed: false,
+            views: 830,
+            likes: 46,
+            saves: 18,
+            verified: 7,
+            posts: [
+              { tier: "free", text: "水色清时用自然色，浑水换高对比色。" },
+              { tier: "paid", text: "三组 drift 线路和挂底避让点，适合小船和岸边远投。" },
+            ],
+            catches: [
+              {
+                id: crypto.randomUUID(),
+                angler: "老王海钓实验室",
+                species: "Porgy",
+                size: "keeper",
+                method: "squid 小块底钓",
+                notes: "落潮后走水刚放慢时最稳。",
+                privacy: "public",
+                createdAt: new Date(Date.now() - 28 * 60 * 60 * 1000).toISOString(),
+              },
+            ],
+            comments: [],
+          },
+          ...publicSeedSpots(),
+        ];
+      }
+
+      function publicSeedSpots() {
+        return PUBLIC_SEED_SPOTS.map((spot, index) => ({
+          ...spot,
+          followers: 8 + index * 3,
+          subscribers: 0,
+          followed: false,
+          subscribed: false,
+          views: 120 + index * 47,
+          likes: 6 + index * 2,
+          saves: 3 + index,
+          verified: 0,
+          posts: [
+            { tier: "free", text: `公开资料导入：${spot.sourceName}。请以官方页面、现场公告和当地法规为准。` },
+          ],
+          catches: [],
+          comments: [],
+        }));
+      }
+
+      function mergePublicSeedSpots(input) {
+        const existingIds = new Set(input.map((spot) => spot.id));
+        const merged = [...input];
+        publicSeedSpots().forEach((spot) => {
+          if (!existingIds.has(spot.id)) merged.push(spot);
+        });
+        persistMergedSpots(merged);
+        return merged;
+      }
+
+      function persistMergedSpots(nextSpots) {
+        localStorage.setItem("fishing_spots_v1", JSON.stringify(nextSpots));
+      }
+
+      function normalizeSpots(input) {
+        return input.map((spot) => ({
+          ...spot,
+          owner: spot.owner === "我" ? userProfile.nickname : spot.owner,
+          views: Number.isFinite(spot.views) ? spot.views : 0,
+          likes: Number.isFinite(spot.likes) ? spot.likes : 0,
+          saves: Number.isFinite(spot.saves) ? spot.saves : 0,
+          verified: Number.isFinite(spot.verified) ? spot.verified : 0,
+          posts: Array.isArray(spot.posts) ? spot.posts : [],
+          catches: Array.isArray(spot.catches) ? spot.catches : [],
+          comments: Array.isArray(spot.comments) ? spot.comments : [],
+          sourceType: spot.sourceType || "",
+          sourceName: spot.sourceName || "",
+          sourceUrl: spot.sourceUrl || "",
+        }));
+      }
+
+      function persistSpots() {
+        localStorage.setItem("fishing_spots_v1", JSON.stringify(spots));
+      }
+
+      function visibilityLabel(value) {
+        return {
+          private: "私人财产",
+          followers: "仅关注者",
+          public: "公开",
+          paid: "深度关注",
+        }[value] || value;
+      }
+
+      function visibilityTone(value) {
+        return value === "public" ? "good" : value === "paid" ? "warn" : "";
+      }
+
+      function contributionScore(spot) {
+        return Math.round(
+          (spot.posts?.length || 0) * 15 +
+            (spot.catches?.length || 0) * 20 +
+            (spot.comments?.length || 0) * 3 +
+            Math.floor((spot.views || 0) / 10) +
+            (spot.likes || 0) +
+            (spot.saves || 0) * 3 +
+            (spot.followers || 0) * 5 +
+            (spot.verified || 0) * 20,
+        );
+      }
+
+      function displayedCoords(spot, isMine) {
+        if (isMine || spot.subscribed) return `${spot.lat.toFixed(4)}, ${spot.lon.toFixed(4)}`;
+        if (spot.visibility === "paid") return "精确坐标需深度关注";
+        return `${spot.lat.toFixed(2)}, ${spot.lon.toFixed(2)} 附近`;
+      }
+
+      function renderSpots() {
+        const mine = spots.filter((spot) => spot.owner === userProfile.nickname);
+        const discoverable = spots.filter((spot) => spot.visibility !== "private");
+
+        els.mySpots.innerHTML = mine.length
+          ? mine.map((spot) => spotCard(spot, true)).join("")
+          : '<p class="hint">还没有保存自己的钓点。选中地图位置后，在左侧填写信息并保存。</p>';
+
+        els.publicSpots.innerHTML = discoverable.length
+          ? discoverable.map((spot) => spotCard(spot, false)).join("")
+          : '<p class="hint">暂无公开钓点。</p>';
+
+        const active = spots.find((spot) => spot.id === selectedSpotId) || discoverable[0] || spots[0];
+        renderCreator(active);
+        renderWeeklyBoard();
+        renderRecentCatches(active);
+        renderMapSpots();
+        renderFishFeed();
+      }
+
+      function spotCard(spot, isMine) {
+        const active = spot.id === selectedSpotId ? " active" : "";
+        const exact = displayedCoords(spot, isMine);
+        const canNavigate = canShowExactSpot(spot);
+        const followText = spot.followed ? "已关注" : "关注";
+        const subText = spot.subscribed ? "已深度关注" : "深度关注";
+        const sourceBadge = spot.sourceType === "public" ? '<span class="pill good">公开资料</span>' : "";
+        const sourceLine = spot.sourceUrl
+          ? `<div class="spot-meta">来源：<a href="${escapeHtml(spot.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(spot.sourceName || "公开来源")}</a></div>`
+          : "";
+        return `
+          <article class="spot-card${active}" data-spot-id="${spot.id}">
+            <div class="spot-head">
+              <div>
+                <strong>${escapeHtml(spot.name)}</strong>
+                <div class="spot-meta">${escapeHtml(spot.owner)} · ${exact}</div>
+              </div>
+              <span class="pill ${visibilityTone(spot.visibility)}">${visibilityLabel(spot.visibility)}</span>
+            </div>
+            ${sourceBadge ? `<div class="pill-row">${sourceBadge}</div>` : ""}
+            <div class="spot-meta">目标鱼：${escapeHtml(spot.targetFish || "未填写")}</div>
+            <div class="spot-meta">最佳窗口：${escapeHtml(spot.bestWindow || "未填写")}</div>
+            ${sourceLine}
+            <div class="pill-row">
+              <span class="pill">贡献 ${contributionScore(spot)}</span>
+              <span class="pill">${spot.views || 0} 浏览</span>
+              <span class="pill">${spot.catches?.length || 0} 钓获</span>
+            </div>
+            <div class="spot-actions">
+              <button class="secondary" type="button" data-action="select-spot">${isMine ? "编辑" : "查看"}</button>
+              <button class="secondary" type="button" data-action="navigate-spot" data-locked="${canNavigate ? "false" : "true"}">${canNavigate ? "导航" : "需解锁"}</button>
+              <button class="secondary" type="button" data-action="follow-spot">${followText}</button>
+              <button class="secondary" type="button" data-action="subscribe-spot">${subText}</button>
+            </div>
+          </article>`;
+      }
+
+      function renderCreator(spot) {
+        if (!spot) {
+          els.creatorTitle.textContent = "创作者主页";
+          els.creatorSummary.textContent = "选择一个公开钓点，查看博主分享、关注和深度订阅入口。";
+          els.creatorStats.innerHTML = "";
+          els.creatorFeed.innerHTML = "";
+          els.commentList.innerHTML = "";
+          return;
+        }
+        selectedSpotId = spot.id;
+        els.creatorTitle.textContent = `${spot.owner} · ${spot.name}`;
+        els.creatorSummary.textContent = spot.notes || "这个钓点还没有详细心得。";
+        els.creatorStats.innerHTML = `
+          <span class="pill">${visibilityLabel(spot.visibility)}</span>
+          ${spot.sourceType === "public" ? '<span class="pill good">公开资料导入</span>' : ""}
+          <span class="pill">贡献 ${contributionScore(spot)}</span>
+          <span class="pill">${spot.views || 0} 浏览</span>
+          <span class="pill good">${spot.followers} 关注者</span>
+          <span class="pill warn">${spot.subscribers} 深度关注者</span>
+          <span class="pill">${escapeHtml(spot.targetFish || "目标鱼未填写")}</span>`;
+        if (spot.sourceUrl) {
+          els.creatorSummary.innerHTML = `${escapeHtml(spot.notes || "这个钓点还没有详细心得。")}<br><a href="${escapeHtml(spot.sourceUrl)}" target="_blank" rel="noopener noreferrer">来源：${escapeHtml(spot.sourceName || "公开资料")}</a>`;
+        }
+        els.creatorFeed.innerHTML = (spot.posts || [])
+          .map((post) => {
+            const locked = post.tier === "paid" && !spot.subscribed && spot.owner !== "我";
+            return `<div class="feed-item ${locked ? "locked" : ""}">
+              <strong>${post.tier === "paid" ? "深度内容" : "公开心得"}</strong>
+              <span class="spot-meta">${locked ? "订阅后解锁：潮位、站位、饵型和完整复盘。" : escapeHtml(post.text)}</span>
+            </div>`;
+          })
+          .join("");
+        els.commentList.innerHTML = (spot.comments || []).length
+          ? spot.comments
+              .slice(0, 8)
+              .map((comment) => `<div class="feed-item"><strong>${escapeHtml(comment.author)} · ${formatDateTime(new Date(comment.createdAt))}</strong><span class="spot-meta">${escapeHtml(comment.text)}</span></div>`)
+              .join("")
+          : '<p class="hint">还没有评论。可以补充鱼情、提问或验证这个钓点。</p>';
+      }
+
+      function renderWeeklyBoard() {
+        const ranked = [...spots]
+          .map((spot) => ({ ...spot, score: contributionScore(spot) }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 5);
+        els.weeklyBoard.innerHTML = ranked
+          .map(
+            (spot, index) => `<div class="feed-item">
+              <strong>#${index + 1} ${escapeHtml(spot.owner)} · ${escapeHtml(spot.name)}</strong>
+              <span class="spot-meta">贡献 ${spot.score} · ${spot.catches?.length || 0} 钓获 · ${spot.posts?.length || 0} 心得 · ${spot.followers || 0} 关注</span>
+            </div>`,
+          )
+          .join("");
+      }
+
+      function renderRecentCatches(spot) {
+        const catches = (spot?.catches || [])
+          .filter((item) => item.privacy !== "private" || spot.owner === userProfile.nickname)
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+          .slice(0, 6);
+        els.recentCatches.innerHTML = catches.length
+          ? catches
+              .map(
+                (catchLog) => `<div class="feed-item">
+                  <strong>${escapeHtml(catchLog.angler)} 中了 ${escapeHtml(catchLog.species)}</strong>
+                  <span class="spot-meta">${formatDateTime(new Date(catchLog.createdAt))} · ${escapeHtml(catchLog.size || "未填尺寸")} · ${escapeHtml(catchLog.method || "未填钓法")}</span>
+                  <span class="spot-meta">${escapeHtml(catchLog.notes || "")}</span>
+                </div>`,
+              )
+              .join("")
+          : '<p class="hint">当前钓点还没有公开钓获日志。</p>';
+      }
+
+      async function apiRequest(path, options = {}) {
+        if (location.protocol === "file:") return null;
+        try {
+          const response = await fetch(path, {
+            method: options.method || "GET",
+            headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+            body: options.body ? JSON.stringify(options.body) : undefined,
+          });
+          if (!response.ok) throw new Error(`API ${response.status}`);
+          return await response.json();
+        } catch {
+          return null;
+        }
+      }
+
+      async function postFeed(type, title, text, extra = {}) {
+        const item = {
+          type,
+          title,
+          text,
+          spotId: selectedSpotId || "",
+          lat: selectedPoint?.lat,
+          lon: selectedPoint?.lon,
+          ...extra,
+        };
+        const result = await apiRequest("/api/feed", { method: "POST", body: item });
+        if (result?.item) renderFishFeed([result.item]);
+      }
+
+      async function syncSpotToBackend(spot) {
+        await apiRequest("/api/spots", { method: "POST", body: spot });
+      }
+
+      async function loadBackendFeed() {
+        const result = await apiRequest("/api/feed");
+        if (result?.feed) renderFishFeed(result.feed);
+      }
+
+      function localFeedItems() {
+        const items = [];
+        spots.forEach((spot) => {
+          (spot.catches || []).slice(0, 2).forEach((catchLog) => {
+            items.push({
+              id: catchLog.id,
+              type: "catch",
+              title: `${catchLog.angler || spot.owner} 刚中鱼`,
+              text: `${catchLog.species} · ${spot.name} · ${catchLog.size || "尺寸待补"}`,
+              createdAt: catchLog.createdAt,
+            });
+          });
+          (spot.posts || []).slice(0, 1).forEach((post, index) => {
+            items.push({
+              id: `${spot.id}-post-${index}`,
+              type: "tip",
+              title: `${spot.owner} 更新心得`,
+              text: `${spot.name} · ${post.tier === "paid" ? "深度内容" : post.text}`,
+              createdAt: spot.updatedAt || new Date().toISOString(),
+            });
+          });
+        });
+        friendShares.slice(0, 3).forEach((share) => {
+          items.push({
+            id: share.id,
+            type: "friend",
+            title: `分享给 ${share.friendName}`,
+            text: `${share.spotName} · ${share.timeLabel}`,
+            createdAt: share.createdAt,
+          });
+        });
+        return items;
+      }
+
+      function renderFishFeed(remoteItems = []) {
+        const merged = [...remoteItems, ...localFeedItems()]
+          .filter(Boolean)
+          .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+          .slice(0, 8);
+        els.fishFeed.innerHTML = merged.length
+          ? merged
+              .map(
+                (item) => `<div class="feed-item">
+                  <strong>${escapeHtml(item.title || "鱼情动态")}</strong>
+                  <span class="spot-meta">${escapeHtml(item.text || "")}</span>
+                  <span class="spot-meta">${item.createdAt ? formatDateTime(new Date(item.createdAt)) : "刚刚"}</span>
+                </div>`,
+              )
+              .join("")
+          : '<p class="hint">还没有鱼情动态。钓获、心得、正在作钓和鱼照识别都会进入这里。</p>';
+      }
+
+      const LOCAL_FISH_RULES = {
+        "striped bass": {
+          label: "Striped bass",
+          minSize: '海水槽限 28"-31"',
+          possession: "1 条/人/天",
+          season: "4/15-12/15",
+          note: "纽约海水常见规则；Hudson River/Delaware River 等水域可能不同。",
+        },
+        fluke: {
+          label: "Summer flounder / fluke",
+          minSize: '19"-19.5"，按日期段不同',
+          possession: "3 条/人/天",
+          season: "5/4-10/15，分日期段",
+          note: "纽约 fluke 2026 规则按季节段区分尺寸。",
+        },
+        porgy: {
+          label: "Scup / porgy",
+          minSize: '岸钓 9.5"，船钓 11"',
+          possession: "30 条/人/天",
+          season: "5/1-12/31",
+          note: "岸钓和船钓尺寸不同。",
+        },
+        bluefish: {
+          label: "Bluefish",
+          minSize: "无最低尺寸",
+          possession: "个人 5 条；包船/派对船 7 条",
+          season: "全年",
+          note: "仍需遵守注册、区域和最新公告。",
+        },
+        "black sea bass": {
+          label: "Black sea bass",
+          minSize: '16"',
+          possession: "5/16-8/31 为 3 条；9/1-12/31 为 6 条",
+          season: "5/16-12/31，分日期段",
+          note: "不同季节 bag limit 不同。",
+        },
+        tautog: {
+          label: "Tautog / blackfish",
+          minSize: '16"',
+          possession: "长岛湾 3 条；NY Bight 4 条",
+          season: "按区域不同",
+          note: "南岸和北岸区域规则不同，正式版必须按钓点自动分区。",
+        },
+      };
+
+      const FISH_ALIASES = [
+        ["striped bass", ["striped", "striper", "bass", "海鲈", "条纹鲈"]],
+        ["fluke", ["fluke", "summer flounder", "flounder", "比目鱼"]],
+        ["porgy", ["porgy", "scup", "鲷", "海鲫"]],
+        ["bluefish", ["bluefish", "blue fish", "青鱼"]],
+        ["black sea bass", ["black sea bass", "sea bass", "黑鲈"]],
+        ["tautog", ["tautog", "blackfish", "tog"]],
+      ];
+
+      function clientFishRuleFromText(text) {
+        const haystack = String(text || "").toLowerCase();
+        const matched = FISH_ALIASES.find(([, aliases]) => aliases.some((alias) => haystack.includes(alias)));
+        const key = matched?.[0] || "striped bass";
+        return { key, rule: LOCAL_FISH_RULES[key], confidence: matched ? 0.72 : 0.38 };
+      }
+
+      function fallbackPhotoAnalysis(input) {
+        const match = clientFishRuleFromText(`${input.fileName || ""} ${input.speciesHint || ""}`);
+        return {
+          species: match.rule.label,
+          confidence: match.confidence,
+          location: {
+            lat: input.lat,
+            lon: input.lon,
+            label: `${Number(input.lat).toFixed(6)}, ${Number(input.lon).toFixed(6)}`,
+          },
+          regulation: {
+            sourceName: "NY DEC Recreational Saltwater Fishing Regulations",
+            sourceUrl: "https://dec.ny.gov/things-to-do/saltwater-fishing/recreational-fishing-regulations",
+            lastObserved: "2026-06-28",
+            ...match.rule,
+            warning: "规则会变动，正式留鱼前必须以官方最新页面和当地水域规则为准。",
+          },
+        };
+      }
+
+      function renderPhotoAnalysisResult(result) {
+        if (!result) {
+          els.fishPhotoResult.innerHTML = '<p class="hint">暂时无法识别。可以先输入鱼种线索，例如 fluke、porgy、striped bass。</p>';
+          return;
+        }
+        const confidence = Math.round((result.confidence || 0) * 100);
+        const rule = result.regulation || {};
+        const minSize = rule.minSize || rule.minimum || "待查";
+        const sourceName = rule.sourceName || rule.source || "查看";
+        els.fishPhotoResult.innerHTML = `
+          <div class="feed-item">
+            <strong>${escapeHtml(result.species || "候选鱼种")} · 可信度 ${confidence}%</strong>
+            <span class="spot-meta">地点：${escapeHtml(result.location?.label || `${selectedPoint.lat.toFixed(6)}, ${selectedPoint.lon.toFixed(6)}`)}</span>
+            <span class="spot-meta">规则：尺寸 ${escapeHtml(minSize)}；可拿 ${escapeHtml(rule.possession || "待查")}；季节 ${escapeHtml(rule.season || "待查")}。</span>
+            <span class="spot-meta">${escapeHtml(rule.note || "")}</span>
+            <a href="${escapeHtml(rule.sourceUrl || "#")}" target="_blank" rel="noopener noreferrer">官方规则来源：${escapeHtml(sourceName)}</a>
+            <span class="spot-meta">${escapeHtml(rule.warning || "规则可能变化，留鱼前请核对官方最新信息。")}</span>
+          </div>`;
+      }
+
+      function selectedFishPhotoFile() {
+        return els.fishPhotoCamera.files?.[0] || els.fishPhotoAlbum.files?.[0] || null;
+      }
+
+      function syncFishPhotoSource(source) {
+        if (source === "camera" && els.fishPhotoCamera.files?.length) {
+          els.fishPhotoAlbum.value = "";
+          setStatus("已选择现场拍照鱼照，可识别鱼种与规则。", "good");
+        }
+        if (source === "album" && els.fishPhotoAlbum.files?.length) {
+          els.fishPhotoCamera.value = "";
+          setStatus("已选择相册鱼照，可识别鱼种与规则。", "good");
+        }
+      }
+
+      async function analyzeFishPhoto() {
+        const file = selectedFishPhotoFile();
+        const speciesHint = els.fishPhotoHint.value.trim();
+        if (!file && !speciesHint) {
+          setStatus("请现场拍照、从相册上传，或先输入鱼种线索。", "warning");
+          els.fishPhotoHint.focus();
+          return;
+        }
+        const payload = {
+          fileName: file?.name || "",
+          speciesHint,
+          lat: selectedPoint.lat,
+          lon: selectedPoint.lon,
+          locationSource: "current-point",
+        };
+        els.fishPhotoResult.innerHTML = '<p class="hint">正在识别鱼种与当地规则...</p>';
+        const response = await apiRequest("/api/photo-analysis", { method: "POST", body: payload });
+        const result = response?.analysis || fallbackPhotoAnalysis(payload);
+        renderPhotoAnalysisResult(result);
+        els.catchSpecies.value = result.species || els.catchSpecies.value;
+        const rule = result.regulation || {};
+        const minSize = rule.minSize || rule.minimum || "待查";
+        const sourceName = rule.sourceName || rule.source || "官方规则";
+        const lines = [
+          `鱼照识别：${result.species || "候选鱼种"}，可信度 ${Math.round((result.confidence || 0) * 100)}%。`,
+          `规则提示：尺寸 ${minSize}；可拿 ${rule.possession || "待查"}；季节 ${rule.season || "待查"}。`,
+          `规则来源：${sourceName} ${rule.sourceUrl || ""}`,
+        ];
+        const existing = els.catchNotes.value.trim();
+        els.catchNotes.value = existing ? `${existing}\n\n${lines.join("\n")}` : lines.join("\n");
+        if (response?.feedItem) {
+          renderFishFeed([response.feedItem]);
+        } else {
+          renderFishFeed([
+            {
+              id: crypto.randomUUID(),
+              type: "photo",
+              title: "上传鱼照识别",
+              text: `${result.species || "候选鱼种"} · ${rule.possession || "规则待查"} · ${payload.lat.toFixed(4)}, ${payload.lon.toFixed(4)}`,
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        }
+        setStatus("鱼照识别结果已写入钓获说明，可继续补充。", "good");
+      }
+
+      function saveCurrentSpot() {
+        syncBestWindow();
+        const name = els.spotName.value.trim();
+        if (!name) {
+          setStatus("请先填写钓点名称。", "warning");
+          els.spotName.focus();
+          return;
+        }
+        const existing = selectedSpotId ? spots.find((spot) => spot.id === selectedSpotId && spot.owner === "我") : null;
+        const payload = {
+          id: existing?.id || crypto.randomUUID(),
+          owner: userProfile.nickname,
+          name,
+          lat: selectedPoint.lat,
+          lon: selectedPoint.lon,
+          visibility: els.spotVisibility.value,
+          targetFish: els.targetFish.value.trim(),
+          bestWindow: els.bestWindow.value.trim(),
+          notes: els.spotNotes.value.trim(),
+          followers: existing?.followers || 0,
+          subscribers: existing?.subscribers || 0,
+          followed: existing?.followed || false,
+          subscribed: existing?.subscribed || false,
+          views: existing?.views || 0,
+          likes: existing?.likes || 0,
+          saves: existing?.saves || 0,
+          verified: existing?.verified || 0,
+          posts: existing?.posts || [],
+          catches: existing?.catches || [],
+          comments: existing?.comments || [],
+        };
+        if (existing) {
+          spots = spots.map((spot) => (spot.id === existing.id ? payload : spot));
+        } else {
+          spots.unshift(payload);
+        }
+        selectedSpotId = payload.id;
+        persistSpots();
+        renderSpots();
+        syncSpotToBackend(payload);
+        postFeed("spot", "保存了钓点", `${payload.name} · ${payload.targetFish || "目标鱼待补充"}`);
+        setStatus("钓点已保存到你的资产库。", "good");
+      }
+
+      function publishTip() {
+        const spot = spots.find((item) => item.id === selectedSpotId);
+        const text = els.spotNotes.value.trim();
+        if (!spot || spot.owner !== userProfile.nickname) {
+          setStatus("请先保存或选择一个自己的钓点，再发布心得。", "warning");
+          return;
+        }
+        if (!text) {
+          setStatus("请在经验说明里写下要发布的心得。", "warning");
+          return;
+        }
+        spot.posts = spot.posts || [];
+        spot.posts.unshift({ tier: spot.visibility === "paid" ? "paid" : "free", text });
+        persistSpots();
+        renderSpots();
+        postFeed("tip", "更新了钓点心得", `${spot.name} · ${text}`);
+        setStatus("心得已发布到该钓点主页。", "good");
+      }
+
+      function saveProfile() {
+        const nickname = els.nickname.value.trim() || "我";
+        const oldName = userProfile.nickname;
+        userProfile = { nickname };
+        localStorage.setItem("fishing_user_profile_v1", JSON.stringify(userProfile));
+        spots = spots.map((spot) => (spot.owner === oldName ? { ...spot, owner: nickname } : spot));
+        persistSpots();
+        renderSpots();
+        apiRequest("/api/session", { method: "POST", body: { nickname } });
+        setStatus(`昵称已保存：${nickname}`, "good");
+      }
+
+      async function copyShareLink() {
+        const spot = spots.find((item) => item.id === selectedSpotId);
+        const url = new URL(location.href);
+        if (spot) url.searchParams.set("spot", spot.id);
+        await navigator.clipboard.writeText(url.toString());
+        setStatus("群内分享链接已复制。", "good");
+      }
+
+      function renderFriends() {
+        els.friendSelect.innerHTML = friends.length
+          ? friends.map((friend) => `<option value="${friend.id}">${escapeHtml(friend.name)}</option>`).join("")
+          : '<option value="">还没有好友</option>';
+        els.friendShareList.innerHTML = friendShares.length
+          ? friendShares
+              .slice(0, 4)
+              .map(
+                (share) => `<div class="feed-item">
+                  <strong>${escapeHtml(share.friendName)} · ${formatDateTime(new Date(share.createdAt))}</strong>
+                  <span class="spot-meta">${escapeHtml(share.spotName)} · ${escapeHtml(share.timeLabel)}</span>
+                </div>`,
+              )
+              .join("")
+          : '<p class="hint">还没有分享记录。选择好友后可一键发送当前钓点状态。</p>';
+      }
+
+      function addFriend() {
+        const name = els.friendName.value.trim();
+        if (!name) {
+          setStatus("请先输入好友昵称。", "warning");
+          els.friendName.focus();
+          return;
+        }
+        if (friends.some((friend) => friend.name.toLowerCase() === name.toLowerCase())) {
+          setStatus("这个好友已经在列表里。", "warning");
+          return;
+        }
+        friends.push({ id: crypto.randomUUID(), name });
+        els.friendName.value = "";
+        persistFriends();
+        renderFriends();
+        setStatus(`已添加好友：${name}`, "good");
+      }
+
+      function buildFishingNowShare(friend) {
+        const spot = spots.find((item) => item.id === selectedSpotId);
+        const row = selectedForecastRow() || forecastRows[0] || {};
+        const tideEvent = nearestTideEvent(row.time || new Date());
+        const url = new URL(location.href);
+        if (spot) url.searchParams.set("spot", spot.id);
+        const locationText = spot && canShowExactSpot(spot)
+          ? `${spot.name} (${spot.lat.toFixed(5)}, ${spot.lon.toFixed(5)})`
+          : spot
+            ? `${spot.name} 附近`
+            : `${selectedPoint.lat.toFixed(5)}, ${selectedPoint.lon.toFixed(5)}`;
+        return [
+          `${friend.name}，我正在这里钓鱼：`,
+          `钓点：${locationText}`,
+          `时间：${formatDateTime(row.time || new Date())}`,
+          `作钓指数：${els.scoreValue.textContent || "--"} ${els.scoreTitle.textContent || ""}`.trim(),
+          `天气：风 ${formatValue(row.wind, 1)} m/s ${windDirName(row.windDir)}，气压 ${formatValue(row.pressure, 1)} hPa，浪 ${formatValue(row.wave, 2)} m`,
+          `潮汐：${tideEvent ? `${tideEvent.type === "H" ? "满潮" : "干潮"} ${formatDateTime(tideEvent.time)}` : "暂无潮汐事件"}`,
+          `链接：${url.toString()}`,
+        ].join("\n");
+      }
+
+      async function shareFishingNow() {
+        if (!friends.length || !els.friendSelect.value) {
+          setStatus("请先添加或选择一个好友。", "warning");
+          return;
+        }
+        const friend = friends.find((item) => item.id === els.friendSelect.value);
+        if (!friend) {
+          setStatus("请选择有效好友。", "warning");
+          return;
+        }
+        const spot = spots.find((item) => item.id === selectedSpotId);
+        const row = selectedForecastRow() || forecastRows[0] || {};
+        const text = buildFishingNowShare(friend);
+        await navigator.clipboard.writeText(text);
+        friendShares.unshift({
+          id: crypto.randomUUID(),
+          friendId: friend.id,
+          friendName: friend.name,
+          spotName: spot?.name || "当前坐标",
+          timeLabel: formatDateTime(row.time || new Date()),
+          createdAt: new Date().toISOString(),
+        });
+        friendShares = friendShares.slice(0, 12);
+        persistFriendShares();
+        renderFriends();
+        postFeed("fishing-now", "正在作钓", `${spot?.name || "当前坐标"} · 分享给 ${friend.name} · ${formatDateTime(row.time || new Date())}`);
+        setStatus(`已复制给 ${friend.name} 的钓点分享卡片。`, "good");
+      }
+
+      function nearestTideEvent(time = new Date()) {
+        if (!tideHighLow.length) return null;
+        return tideHighLow.reduce((best, event) => {
+          const currentDistance = Math.abs(event.time.getTime() - time.getTime());
+          const bestDistance = Math.abs(best.time.getTime() - time.getTime());
+          return currentDistance < bestDistance ? event : best;
+        }, tideHighLow[0]);
+      }
+
+      function generateCatchReport() {
+        const row = selectedForecastRow() || forecastRows[0] || {};
+        const tideEvent = nearestTideEvent(row.time || new Date());
+        const spot = spots.find((item) => item.id === selectedSpotId);
+        const lines = [
+          `钓点：${spot?.name || els.spotName.value.trim() || "未命名钓点"}`,
+          `坐标：${selectedPoint.lat.toFixed(6)}, ${selectedPoint.lon.toFixed(6)}`,
+          `时间：${formatDateTime(row.time || new Date())}`,
+          `天气：风 ${formatValue(row.wind, 1)} m/s ${windDirName(row.windDir)}，阵风 ${formatValue(row.gust, 1)} m/s，气压 ${formatValue(row.pressure, 1)} hPa，浪高 ${formatValue(row.wave, 2)} m，水温 ${formatValue(row.sst, 1)}°C。`,
+          tideEvent
+            ? `潮汐：附近潮汐站 ${currentTideStation?.name || els.tideStation.value}，最近${tideEvent.type === "H" ? "满潮" : "干潮"} ${formatDateTime(tideEvent.time)}，水位 ${formatValue(tideEvent.value, 2)} m。`
+            : `潮汐：潮汐数据等待更新。`,
+          `作钓窗口：${els.bestWindow.value || buildBestWindowText()}`,
+          `鱼种/尺寸：${els.catchSpecies.value.trim() || "待补充"} ${els.catchSize.value.trim() || ""}`.trim(),
+          `饵/钓法：${els.catchMethod.value.trim() || "待补充"}`,
+          "现场细节：",
+        ];
+        const existing = els.catchNotes.value.trim();
+        els.catchNotes.value = existing ? `${lines.join("\n")}\n\n补充记录：\n${existing}` : lines.join("\n");
+        setStatus("已生成渔获细节报告，可继续补充现场文字。", "good");
+      }
+
+      function saveCatchLog() {
+        const spot = spots.find((item) => item.id === selectedSpotId);
+        if (!spot) {
+          setStatus("请先选择一个钓点。", "warning");
+          return;
+        }
+        const species = els.catchSpecies.value.trim();
+        if (!species) {
+          setStatus("请填写鱼种。", "warning");
+          els.catchSpecies.focus();
+          return;
+        }
+        spot.catches = spot.catches || [];
+        const catchLog = {
+          id: crypto.randomUUID(),
+          angler: userProfile.nickname,
+          species,
+          size: els.catchSize.value.trim(),
+          method: els.catchMethod.value.trim(),
+          notes: els.catchNotes.value.trim(),
+          privacy: els.catchPrivacy.value,
+          createdAt: new Date().toISOString(),
+        };
+        spot.catches.unshift(catchLog);
+        spot.verified = (spot.verified || 0) + 1;
+        spot.views = (spot.views || 0) + 12;
+        persistSpots();
+        renderSpots();
+        postFeed("catch", "刚刚中鱼", `${species} · ${spot.name} · ${catchLog.size || "尺寸待补"}`, {
+          spotId: spot.id,
+        });
+        els.catchSpecies.value = "";
+        els.catchSize.value = "";
+        els.catchMethod.value = "";
+        els.catchNotes.value = "";
+        setStatus("钓获日志已记录，并计入贡献值。", "good");
+      }
+
+      function postComment() {
+        const spot = spots.find((item) => item.id === selectedSpotId);
+        const text = els.commentText.value.trim();
+        if (!spot || !text) {
+          setStatus("请选择钓点并填写评论。", "warning");
+          return;
+        }
+        spot.comments = spot.comments || [];
+        spot.comments.unshift({
+          id: crypto.randomUUID(),
+          author: userProfile.nickname,
+          text,
+          createdAt: new Date().toISOString(),
+        });
+        spot.views = (spot.views || 0) + 3;
+        persistSpots();
+        renderSpots();
+        els.commentText.value = "";
+        setStatus("评论已发布。", "good");
+      }
+
+      function selectSpot(spot) {
+        selectedSpotId = spot.id;
+        updateCoordinates(spot.lat, spot.lon);
+        if (baseMap) {
+          baseMap.setView([spot.lat, spot.lon], Math.max(baseMap.getZoom?.() || 10, 10));
+          placeCrosshair(baseMap, spot.lat, spot.lon);
+        }
+        spot.views = (spot.views || 0) + 1;
+        if (spot.owner === userProfile.nickname) {
+          els.spotName.value = spot.name;
+          els.spotVisibility.value = spot.visibility;
+          els.targetFish.value = spot.targetFish || "";
+          applyBestWindowText(spot.bestWindow || "");
+          els.spotNotes.value = spot.notes || "";
+        }
+        renderSpots();
+        persistSpots();
+        setStatus(`已切换到钓点：${spot.name}`, "good");
+        autoLoadMapAndForecast(180);
+      }
+
+      function showLockedSpotOnMap(spot) {
+        const point = fuzzySpotPoint(spot);
+        selectedSpotId = spot.id;
+        if (baseMap) {
+          baseMap.setView([point.lat, point.lon], Math.max(baseMap.getZoom?.() || 10, 10));
+        }
+        renderSpots();
+        setStatus(spot.visibility === "paid" ? "该钓点需要深度关注后才能使用精确导航。" : "关注后可查看该钓点精确位置并导航。", "warning");
+      }
+
+      function navigationUrlForSpot(spot) {
+        const destination = encodeURIComponent(`${spot.lat.toFixed(6)},${spot.lon.toFixed(6)}`);
+        return `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=driving`;
+      }
+
+      function navigateToSpot(spot) {
+        if (!canShowExactSpot(spot)) {
+          showLockedSpotOnMap(spot);
+          return;
+        }
+        selectSpot(spot);
+        const url = navigationUrlForSpot(spot);
+        window.open(url, "_blank", "noopener,noreferrer");
+        setStatus(`已定位 ${spot.name}，并打开导航路线。`, "good");
+      }
+
+      function resetSpotForm() {
+        selectedSpotId = null;
+        els.spotName.value = "";
+        els.spotVisibility.value = "private";
+        els.targetFish.value = "";
+        applyBestWindowText("");
+        els.spotNotes.value = "";
+        renderSpots();
+      }
+
+      function useCurrentLocation() {
+        if (!navigator.geolocation) {
+          setStatus("当前浏览器不支持定位。", "warning");
+          return;
+        }
+        els.useCurrentLocation.disabled = true;
+        setStatus("正在获取手机/浏览器当前位置...");
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const { latitude, longitude } = position.coords;
+            updateCoordinates(latitude, longitude);
+            if (baseMap) {
+              baseMap.setView([latitude, longitude], Math.max(baseMap.getZoom?.() || 12, 12));
+              placeCrosshair(baseMap, latitude, longitude);
+            }
+            if (!els.spotName.value.trim()) {
+              els.spotName.value = `当前位置钓点 ${formatAxisDate(new Date())}`;
+            }
+            setStatus("已用当前位置定点，正在更新天气和潮汐。", "good");
+            autoLoadMapAndForecast(150);
+            els.useCurrentLocation.disabled = false;
+          },
+          (error) => {
+            const message =
+              error.code === error.PERMISSION_DENIED
+                ? "定位权限被拒绝。请允许浏览器定位，且尽量使用 http://localhost:4173/ 或 HTTPS。"
+                : error.code === error.POSITION_UNAVAILABLE
+                  ? "暂时无法取得当前位置。"
+                  : "定位超时，请稍后重试。";
+            setStatus(message, "warning");
+            els.useCurrentLocation.disabled = false;
+          },
+          { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
+        );
+      }
+
+      function handleSpotAction(event) {
+        const button = event.target.closest("button[data-action]");
+        if (!button) return;
+        const card = button.closest("[data-spot-id]");
+        const spot = spots.find((item) => item.id === card?.dataset.spotId);
+        if (!spot) return;
+
+        const action = button.dataset.action;
+        if (action === "select-spot") {
+          if (canShowExactSpot(spot)) selectSpot(spot);
+          else showLockedSpotOnMap(spot);
+        }
+        if (action === "navigate-spot") {
+          navigateToSpot(spot);
+        }
+        if (action === "follow-spot") {
+          spot.followed = !spot.followed;
+          spot.followers += spot.followed ? 1 : -1;
+          spot.views = (spot.views || 0) + 5;
+          persistSpots();
+          renderSpots();
+        }
+        if (action === "subscribe-spot") {
+          spot.subscribed = !spot.subscribed;
+          spot.subscribers += spot.subscribed ? 1 : -1;
+          spot.views = (spot.views || 0) + 10;
+          persistSpots();
+          renderSpots();
+          setStatus(spot.subscribed ? "已模拟开通深度关注。正式版需接 Stripe/微信/支付宝等支付。" : "已取消模拟深度关注。", "good");
+        }
+      }
+
+      function resetCommunity() {
+        localStorage.removeItem("fishing_spots_v1");
+        spots = mergePublicSeedSpots(normalizeSpots(loadSpots()));
+        selectedSpotId = spots[0]?.id || null;
+        persistSpots();
+        renderSpots();
+        setStatus("社区演示数据已重置。", "good");
+      }
+
+      function importPublicSpotSeeds() {
+        const before = spots.length;
+        spots = mergePublicSeedSpots(normalizeSpots(spots));
+        persistSpots();
+        renderSpots();
+        const added = spots.length - before;
+        setStatus(added > 0 ? `已导入 ${added} 个公开钓点。` : "公开钓点已经在资料库中。", "good");
+      }
+
+      function escapeHtml(value) {
+        return String(value || "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      els.loadMap.addEventListener("click", initMap);
+      els.fetchForecast.addEventListener("click", updateAllData);
+      els.clearKeys.addEventListener("click", clearKeys);
+      els.copyCoords.addEventListener("click", copyCoordinates);
+      els.fallbackMap.addEventListener("click", selectFallbackPoint);
+      els.coordinateInput.addEventListener("change", () => {
+        const parsed = parseCoordinateInput(els.coordinateInput.value);
+        if (!parsed) {
+          setStatus("坐标格式应类似 40.908, -73.454。", "warning");
+          els.coordinateInput.value = `${selectedPoint.lat.toFixed(6)}, ${selectedPoint.lon.toFixed(6)}`;
+          return;
+        }
+        updateCoordinates(parsed.lat, parsed.lon);
+        autoLoadMapAndForecast(250);
+      });
+      els.zoom.addEventListener("change", () => autoLoadMapAndForecast(250));
+      els.saveProfile.addEventListener("click", saveProfile);
+      els.copyShareLink.addEventListener("click", copyShareLink);
+      els.resetCommunity.addEventListener("click", resetCommunity);
+      els.importPublicSpots.addEventListener("click", importPublicSpotSeeds);
+      els.addFriend.addEventListener("click", addFriend);
+      els.shareFishingNow.addEventListener("click", shareFishingNow);
+      els.useCurrentLocation.addEventListener("click", useCurrentLocation);
+      els.saveSpot.addEventListener("click", saveCurrentSpot);
+      els.publishTip.addEventListener("click", publishTip);
+      els.resetSpotForm.addEventListener("click", resetSpotForm);
+      els.targetFish.addEventListener("input", renderFishSuggestions);
+      els.targetFish.addEventListener("focus", renderFishSuggestions);
+      els.targetFish.addEventListener("blur", () => {
+        setTimeout(() => els.fishSuggestions.classList.remove("open"), 160);
+      });
+      els.fishSuggestions.addEventListener("mousedown", (event) => {
+        const button = event.target.closest("[data-fish]");
+        if (!button) return;
+        event.preventDefault();
+        addTargetFish(button.dataset.fish);
+      });
+      [els.bestTidePhase, els.bestRelativeTime, els.bestWindDir, els.bestWindSpeed, els.bestDaypart].forEach((select) => {
+        select.addEventListener("change", syncBestWindow);
+      });
+      syncBestWindow();
+      els.generateCatchReport.addEventListener("click", generateCatchReport);
+      els.saveCatch.addEventListener("click", saveCatchLog);
+      els.fishPhotoCamera.addEventListener("change", () => syncFishPhotoSource("camera"));
+      els.fishPhotoAlbum.addEventListener("change", () => syncFishPhotoSource("album"));
+      els.analyzeFishPhoto.addEventListener("click", analyzeFishPhoto);
+      els.postComment.addEventListener("click", postComment);
+      els.mySpots.addEventListener("click", handleSpotAction);
+      els.publicSpots.addEventListener("click", handleSpotAction);
+      els.hourlyScoreChart.addEventListener("click", selectHourlyScore);
+      els.openTideModal.addEventListener("click", openTideModal);
+      els.closeTideModal.addEventListener("click", closeTideModal);
+      els.tideModal.addEventListener("click", (event) => {
+        if (event.target === els.tideModal) closeTideModal();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeTideModal();
+      });
+      window.addEventListener("resize", () => {
+        if (!els.tideModal.classList.contains("open")) return;
+        resizeLargeTideCanvas();
+        drawTideChart(els.tideChartLarge);
+      });
+      els.hourlyScoreChart.addEventListener("pointerdown", startHourlyScoreDrag);
+      els.hourlyScoreChart.addEventListener("pointermove", dragHourlyScore);
+      els.hourlyScoreChart.addEventListener("pointerup", stopHourlyScoreDrag);
+      els.hourlyScoreChart.addEventListener("pointercancel", stopHourlyScoreDrag);
+      els.hourlyScoreChart.addEventListener("pointerleave", stopHourlyScoreDrag);
+      document.querySelectorAll("[data-hour-window]").forEach((button) => {
+        button.addEventListener("click", () => jumpHourlyWindow(Number(button.dataset.hourWindow)));
+      });
+      els.hourlyTimeInput.addEventListener("change", jumpToSpecifiedHourlyTime);
+      autoLoadMapAndForecast(350);
+    </script>
+  </body>
+</html>

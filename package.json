@@ -1,0 +1,14 @@
+{
+  "name": "1490-fishing-weather-tide",
+  "version": "0.1.0",
+  "private": true,
+  "description": "1490 fishing weather and tide prediction prototype.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
