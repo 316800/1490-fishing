@@ -8,6 +8,8 @@ const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || "0.0.0.0";
 const dataDir = path.join(root, "data");
 const dbPath = path.join(dataDir, "db.json");
+const sessionCookieName = "fishing_session";
+const passwordIterations = 120_000;
 
 const mimeTypes = {
   ".css": "text/css; charset=utf-8",
@@ -79,7 +81,17 @@ const officialRuleUrl = "https://dec.ny.gov/things-to-do/saltwater-fishing/recre
 
 function initialDb() {
   return {
-    users: [{ id: "demo-user", nickname: "我", createdAt: new Date().toISOString() }],
+    users: [
+      {
+        id: "demo-user",
+        email: "demo@1490fishing.local",
+        nickname: "我",
+        role: "member",
+        membership: "free",
+        createdAt: new Date().toISOString(),
+      },
+    ],
+    sessions: [],
     spots: [],
     feed: [
       {
@@ -95,6 +107,21 @@ function initialDb() {
   };
 }
 
+function normalizeDb(db) {
+  db.users = Array.isArray(db.users) ? db.users : initialDb().users;
+  db.sessions = Array.isArray(db.sessions) ? db.sessions : [];
+  db.spots = Array.isArray(db.spots) ? db.spots : [];
+  db.feed = Array.isArray(db.feed) ? db.feed : [];
+  db.photoAnalyses = Array.isArray(db.photoAnalyses) ? db.photoAnalyses : [];
+  db.users = db.users.map((user) => ({
+    role: "member",
+    membership: "free",
+    createdAt: new Date().toISOString(),
+    ...user,
+  }));
+  return db;
+}
+
 function ensureDb() {
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
   if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify(initialDb(), null, 2));
@@ -103,12 +130,90 @@ function ensureDb() {
 function readDb() {
   ensureDb();
   try {
-    return JSON.parse(fs.readFileSync(dbPath, "utf8"));
+    return normalizeDb(JSON.parse(fs.readFileSync(dbPath, "utf8")));
   } catch {
     const db = initialDb();
     writeDb(db);
     return db;
   }
+}
+
+function publicUser(user) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    email: user.email || "",
+    nickname: user.nickname || "钓友",
+    role: user.role || "member",
+    membership: user.membership || "free",
+    createdAt: user.createdAt,
+  };
+}
+
+function normalizeEmail(value = "") {
+  return String(value).trim().toLowerCase();
+}
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
+  const hash = crypto.pbkdf2Sync(String(password), salt, passwordIterations, 32, "sha256").toString("hex");
+  return { salt, hash };
+}
+
+function verifyPassword(password, user) {
+  if (!user?.passwordHash || !user?.passwordSalt) return false;
+  const { hash } = hashPassword(password, user.passwordSalt);
+  return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(user.passwordHash, "hex"));
+}
+
+function parseCookies(req) {
+  const cookies = {};
+  String(req.headers.cookie || "")
+    .split(";")
+    .forEach((pair) => {
+      const index = pair.indexOf("=");
+      if (index < 0) return;
+      const key = pair.slice(0, index).trim();
+      const value = pair.slice(index + 1).trim();
+      cookies[key] = decodeURIComponent(value);
+    });
+  return cookies;
+}
+
+function cookieHeader(name, value, options = {}) {
+  const parts = [`${name}=${encodeURIComponent(value)}`, "Path=/", "HttpOnly", "SameSite=Lax"];
+  if (options.maxAge !== undefined) parts.push(`Max-Age=${options.maxAge}`);
+  if (options.secure) parts.push("Secure");
+  return parts.join("; ");
+}
+
+function requestUser(req, db) {
+  const token = parseCookies(req)[sessionCookieName];
+  if (!token) return null;
+  const now = Date.now();
+  const session = db.sessions.find((item) => item.token === token && new Date(item.expiresAt).getTime() > now);
+  if (!session) return null;
+  return db.users.find((user) => user.id === session.userId) || null;
+}
+
+function setSessionCookie(req, res, db, userId) {
+  const token = crypto.randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  db.sessions = db.sessions
+    .filter((session) => new Date(session.expiresAt).getTime() > Date.now())
+    .concat({ token, userId, createdAt: new Date().toISOString(), expiresAt });
+  res.setHeader("Set-Cookie", cookieHeader(sessionCookieName, token, {
+    maxAge: 30 * 24 * 60 * 60,
+    secure: req.headers["x-forwarded-proto"] === "https",
+  }));
+}
+
+function requireUser(req, res, db) {
+  const user = requestUser(req, db);
+  if (!user) {
+    sendJson(res, 401, { error: "请先登录。" });
+    return null;
+  }
+  return user;
 }
 
 function writeDb(db) {
@@ -184,29 +289,109 @@ async function handleApi(req, res) {
   const db = readDb();
 
   if (req.method === "GET" && parsed.pathname === "/api/session") {
-    sendJson(res, 200, { user: db.users[0] || initialDb().users[0] });
+    sendJson(res, 200, { user: publicUser(requestUser(req, db)) });
     return;
   }
 
-  if (req.method === "POST" && parsed.pathname === "/api/session") {
+  if (req.method === "POST" && parsed.pathname === "/api/auth/register") {
     const input = await readJson(req);
-    const nickname = String(input.nickname || "我").trim().slice(0, 40) || "我";
-    db.users[0] = { ...(db.users[0] || {}), id: "demo-user", nickname, updatedAt: new Date().toISOString() };
+    const email = normalizeEmail(input.email);
+    const nickname = String(input.nickname || "").trim().slice(0, 40) || "钓友";
+    const password = String(input.password || "");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      sendJson(res, 400, { error: "请输入有效邮箱。" });
+      return;
+    }
+    if (password.length < 6) {
+      sendJson(res, 400, { error: "密码至少 6 位。" });
+      return;
+    }
+    if (db.users.some((user) => normalizeEmail(user.email) === email)) {
+      sendJson(res, 409, { error: "这个邮箱已经注册。" });
+      return;
+    }
+    const passwordData = hashPassword(password);
+    const user = {
+      id: crypto.randomUUID(),
+      email,
+      nickname,
+      role: "member",
+      membership: "free",
+      passwordHash: passwordData.hash,
+      passwordSalt: passwordData.salt,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    db.users.push(user);
+    setSessionCookie(req, res, db, user.id);
+    db.feed.push({
+      id: crypto.randomUUID(),
+      type: "member",
+      userId: user.id,
+      title: "新钓友加入",
+      text: `${nickname} 已创建 1490 账号。`,
+      createdAt: new Date().toISOString(),
+    });
     writeDb(db);
-    sendJson(res, 200, { user: db.users[0] });
+    sendJson(res, 201, { user: publicUser(user) });
+    return;
+  }
+
+  if (req.method === "POST" && parsed.pathname === "/api/auth/login") {
+    const input = await readJson(req);
+    const email = normalizeEmail(input.email);
+    const user = db.users.find((item) => normalizeEmail(item.email) === email);
+    if (!user || !verifyPassword(input.password || "", user)) {
+      sendJson(res, 401, { error: "邮箱或密码不正确。" });
+      return;
+    }
+    user.lastLoginAt = new Date().toISOString();
+    setSessionCookie(req, res, db, user.id);
+    writeDb(db);
+    sendJson(res, 200, { user: publicUser(user) });
+    return;
+  }
+
+  if (req.method === "POST" && parsed.pathname === "/api/auth/logout") {
+    const token = parseCookies(req)[sessionCookieName];
+    db.sessions = db.sessions.filter((session) => session.token !== token);
+    res.setHeader("Set-Cookie", cookieHeader(sessionCookieName, "", { maxAge: 0 }));
+    writeDb(db);
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (req.method === "PATCH" && parsed.pathname === "/api/session") {
+    const user = requireUser(req, res, db);
+    if (!user) return;
+    const input = await readJson(req);
+    const nickname = String(input.nickname || user.nickname || "钓友").trim().slice(0, 40) || "钓友";
+    user.nickname = nickname;
+    user.updatedAt = new Date().toISOString();
+    writeDb(db);
+    sendJson(res, 200, { user: publicUser(user) });
     return;
   }
 
   if (req.method === "GET" && parsed.pathname === "/api/spots") {
-    sendJson(res, 200, { spots: db.spots.slice(-200).reverse() });
+    const user = requestUser(req, db);
+    const visibleSpots = db.spots.filter((spot) => {
+      if (spot.visibility === "public") return true;
+      if (!user) return false;
+      return spot.userId === user.id;
+    });
+    sendJson(res, 200, { spots: visibleSpots.slice(-200).reverse() });
     return;
   }
 
   if (req.method === "POST" && parsed.pathname === "/api/spots") {
+    const user = requireUser(req, res, db);
+    if (!user) return;
     const input = await readJson(req);
     const spot = {
       id: input.id || crypto.randomUUID(),
-      userId: "demo-user",
+      userId: user.id,
+      owner: user.nickname,
       name: String(input.name || "未命名钓点").slice(0, 120),
       lat: Number(input.lat),
       lon: Number(input.lon),
@@ -221,10 +406,10 @@ async function handleApi(req, res) {
     db.feed.push({
       id: crypto.randomUUID(),
       type: "spot",
-      userId: "demo-user",
+      userId: user.id,
       spotId: spot.id,
       title: "更新了钓点",
-      text: `${spot.name} · ${spot.targetFish || "目标鱼待补充"}`,
+      text: `${user.nickname} · ${spot.name} · ${spot.targetFish || "目标鱼待补充"}`,
       createdAt: new Date().toISOString(),
     });
     writeDb(db);
@@ -238,13 +423,15 @@ async function handleApi(req, res) {
   }
 
   if (req.method === "POST" && parsed.pathname === "/api/feed") {
+    const user = requireUser(req, res, db);
+    if (!user) return;
     const input = await readJson(req);
     const item = {
       id: crypto.randomUUID(),
       type: input.type || "status",
-      userId: "demo-user",
+      userId: user.id,
       spotId: input.spotId || "",
-      title: String(input.title || "鱼情动态").slice(0, 120),
+      title: String(input.title || `${user.nickname} 的鱼情动态`).slice(0, 120),
       text: String(input.text || "").slice(0, 1000),
       lat: Number(input.lat),
       lon: Number(input.lon),
@@ -257,11 +444,13 @@ async function handleApi(req, res) {
   }
 
   if (req.method === "POST" && parsed.pathname === "/api/photo-analysis") {
+    const user = requireUser(req, res, db);
+    if (!user) return;
     const input = await readJson(req);
     const rule = speciesFromText(`${input.fileName || ""} ${input.speciesHint || ""}`);
     const analysis = {
       id: crypto.randomUUID(),
-      userId: "demo-user",
+      userId: user.id,
       species: rule.displayName,
       confidence: confidenceFromInput(input),
       location: {
@@ -285,7 +474,7 @@ async function handleApi(req, res) {
     const feedItem = {
       id: crypto.randomUUID(),
       type: "photo",
-      userId: "demo-user",
+      userId: user.id,
       title: "上传了鱼照识别",
       text: `${analysis.species} · ${analysis.regulation.minimum} · ${analysis.regulation.possession}`,
       lat: analysis.location.lat,
