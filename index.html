@@ -1783,6 +1783,7 @@
       let forecastUpdating = false;
       let autoRefreshTimer = null;
       let forecastIntervalTimer = null;
+      let openTideModalAfterForecast = false;
       const FISH_CATALOG = [
         { name: "Striped bass", aliases: ["striper", "bass"], habitat: "salt", local: 10, months: [4, 5, 6, 9, 10, 11], note: "长岛春秋主力鱼" },
         { name: "Fluke", aliases: ["summer flounder"], habitat: "salt", local: 9, months: [5, 6, 7, 8, 9], note: "夏季湾口和沙底常见" },
@@ -2252,6 +2253,7 @@
         moveFallbackPin(x * 100, y * 100);
         updateCoordinates(lat, lon);
         setStatus("已选择钓点，正在自动更新预报。", "good");
+        openTideModalAfterNextForecast();
         autoLoadMapAndForecast(250);
       }
 
@@ -2274,6 +2276,10 @@
         if (!point) return event.latlng;
         const rect = map.getContainer().getBoundingClientRect();
         return map.containerPointToLatLng(L.point(point.x - rect.left, point.y - rect.top));
+      }
+
+      function openTideModalAfterNextForecast() {
+        openTideModalAfterForecast = true;
       }
 
       function canShowSpotOnMap(spot) {
@@ -2382,6 +2388,7 @@
           updateCoordinates(pointLat, pointLon);
           placeCrosshair(baseMap, pointLat, pointLon);
           setStatus("已选择钓点，正在自动更新预报。", "good");
+          openTideModalAfterNextForecast();
           autoLoadMapAndForecast(250);
         });
         baseMap.on("zoomend moveend", () => {
@@ -2410,6 +2417,7 @@
           renderAll(false);
           seedWindParticles();
           setStatus("预报已更新。", "good");
+          if (openTideModalAfterForecast) openTideModal();
         } catch (error) {
           console.warn(error);
           forecastRows = makeDemoForecast();
@@ -2425,7 +2433,9 @@
           renderAll(true);
           seedWindParticles();
           setStatus(error.message || "数据接口失败，已切换演示数据。", "warning");
+          if (openTideModalAfterForecast) openTideModal();
         } finally {
+          openTideModalAfterForecast = false;
           forecastUpdating = false;
           els.fetchForecast.disabled = false;
         }
@@ -4802,6 +4812,7 @@
         renderSpots();
         persistSpots();
         setStatus(`已切换到钓点：${spot.name}`, "good");
+        openTideModalAfterNextForecast();
         autoLoadMapAndForecast(180);
       }
 
@@ -4860,6 +4871,7 @@
               els.spotName.value = `当前位置钓点 ${formatAxisDate(new Date())}`;
             }
             setStatus("已用当前位置定点，正在更新天气和潮汐。", "good");
+            openTideModalAfterNextForecast();
             autoLoadMapAndForecast(150);
             els.useCurrentLocation.disabled = false;
           },
