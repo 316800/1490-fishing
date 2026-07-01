@@ -1209,16 +1209,6 @@
       <aside class="sidebar" aria-label="控制面板">
         <section class="brand">
           <h1>1490钓鱼天气与潮汐预测系统</h1>
-          <p class="subtitle">OpenStreetMap 地图取点、Open-Meteo 天气海况、NOAA 潮汐和爆护指数。</p>
-        </section>
-
-        <section class="group">
-          <h2>预报更新</h2>
-          <div class="actions">
-            <button id="fetchForecast" type="button">更新预报</button>
-          </div>
-          <div id="status" class="status">等待载入。</div>
-          <button id="openAdminSettings" class="admin-entry" type="button">管理员入口</button>
         </section>
 
         <nav class="sidebar-tabs" aria-label="功能分区">
@@ -1468,6 +1458,7 @@
             <button id="registerAccount" class="secondary" type="button">注册</button>
             <button id="logoutAccount" class="secondary" type="button">退出</button>
           </div>
+          <button id="openAdminSettings" class="admin-entry" type="button" hidden>管理员入口</button>
           <p class="hint">当前会员为免费账号；后续可加深度关注、订阅分成和创作者后台。</p>
         </section>
         </div>
@@ -1603,10 +1594,17 @@
         <div class="modal-head">
           <div>
             <h2>后台数据设置</h2>
-            <p class="hint">管理员使用；普通钓友不需要接触这些配置。</p>
+            <p class="hint">OpenStreetMap 地图取点、Open-Meteo 天气海况、NOAA 潮汐和爆护指数。</p>
           </div>
           <button id="closeAdminSettings" class="secondary" type="button">关闭</button>
         </div>
+        <section class="group">
+          <h3>预报更新</h3>
+          <div class="actions">
+            <button id="fetchForecast" type="button">手动更新预报</button>
+          </div>
+          <div id="status" class="status">系统每 30 分钟自动更新一次。</div>
+        </section>
         <div class="field">
           <label for="mapKey">WeatherAPI 备用 Key（后端代理）</label>
           <input id="mapKey" autocomplete="off" placeholder="正式版放后端，不在前端直连" type="password" />
@@ -1731,6 +1729,7 @@
       const MARINE_URL = "https://marine-api.open-meteo.com/v1/marine";
       const NOAA_URL = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter";
       const NOAA_STATIONS_URL = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions";
+      const FORECAST_REFRESH_MS = 30 * 60 * 1000;
       const DEG = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
       const TIDE_STATIONS = [
         { id: "8515921", name: "Lloyd Harbor, Huntington Bay", lat: 40.91, lon: -73.4317, shore: "北岸" },
@@ -1785,6 +1784,7 @@
       let currentTideStation = null;
       let forecastUpdating = false;
       let autoRefreshTimer = null;
+      let forecastIntervalTimer = null;
       const FISH_CATALOG = [
         { name: "Striped bass", aliases: ["striper", "bass"], habitat: "salt", local: 10, months: [4, 5, 6, 9, 10, 11], note: "长岛春秋主力鱼" },
         { name: "Fluke", aliases: ["summer flounder"], habitat: "salt", local: 9, months: [5, 6, 7, 8, 9], note: "夏季湾口和沙底常见" },
@@ -2419,6 +2419,14 @@
           initMap();
           updateAllData();
         }, delay);
+      }
+
+      function startForecastAutoRefresh() {
+        clearInterval(forecastIntervalTimer);
+        forecastIntervalTimer = setInterval(() => {
+          if (document.hidden || forecastUpdating) return;
+          updateAllData();
+        }, FORECAST_REFRESH_MS);
       }
 
       async function fetchPointForecast() {
@@ -4997,6 +5005,7 @@
       });
       els.hourlyTimeInput.addEventListener("change", jumpToSpecifiedHourlyTime);
       autoLoadMapAndForecast(350);
+      startForecastAutoRefresh();
     </script>
   </body>
 </html>
