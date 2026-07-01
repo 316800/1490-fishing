@@ -151,14 +151,19 @@ function normalizeDb(db) {
       members: Array.isArray(group.members) ? group.members.slice(0, 80).map((member) => String(member).slice(0, 60)) : [],
       messages: Array.isArray(group.messages)
         ? group.messages
-            .filter((message) => message && (message.text || message.audioUrl))
+            .filter((message) => message && (message.text || message.audioUrl || message.mediaUrl))
             .slice(-100)
             .map((message) => ({
               id: String(message.id || crypto.randomUUID()),
               author: String(message.author || "钓友").slice(0, 60),
-              kind: message.kind === "voice" || message.audioUrl ? "voice" : "text",
+              kind: ["voice", "image", "video", "location"].includes(message.kind) || message.audioUrl
+                ? (message.audioUrl ? "voice" : message.kind)
+                : "text",
               text: String(message.text || "").slice(0, 1000),
               audioUrl: String(message.audioUrl || "").slice(0, 700000),
+              mediaUrl: String(message.mediaUrl || "").slice(0, 1200000),
+              mimeType: String(message.mimeType || "").slice(0, 80),
+              fileName: String(message.fileName || "").slice(0, 120),
               duration: Math.max(0, Number(message.duration) || 0),
               createdAt: message.createdAt || new Date().toISOString(),
             }))
@@ -542,9 +547,14 @@ async function handleApi(req, res) {
         ? input.messages.slice(-80).map((message) => ({
             id: message.id || crypto.randomUUID(),
             author: String(message.author || user.nickname).slice(0, 60),
-            kind: message.kind === "voice" || message.audioUrl ? "voice" : "text",
+            kind: ["voice", "image", "video", "location"].includes(message.kind) || message.audioUrl
+              ? (message.audioUrl ? "voice" : message.kind)
+              : "text",
             text: String(message.text || "").slice(0, 1000),
             audioUrl: String(message.audioUrl || "").slice(0, 700000),
+            mediaUrl: String(message.mediaUrl || "").slice(0, 1200000),
+            mimeType: String(message.mimeType || "").slice(0, 80),
+            fileName: String(message.fileName || "").slice(0, 120),
             duration: Math.max(0, Number(message.duration) || 0),
             createdAt: message.createdAt || new Date().toISOString(),
           }))
@@ -586,16 +596,20 @@ async function handleApi(req, res) {
     }
     const input = await readJson(req);
     const isVoice = input.kind === "voice" || input.audioUrl;
+    const isMedia = input.kind === "image" || input.kind === "video";
     const message = {
       id: input.id || crypto.randomUUID(),
       author: user.nickname,
-      kind: isVoice ? "voice" : "text",
+      kind: isVoice ? "voice" : isMedia ? input.kind : input.kind === "location" ? "location" : "text",
       text: String(input.text || "").trim().slice(0, 1000),
       audioUrl: isVoice ? String(input.audioUrl || "").slice(0, 700000) : "",
+      mediaUrl: isMedia ? String(input.mediaUrl || "").slice(0, 1200000) : "",
+      mimeType: isMedia ? String(input.mimeType || "").slice(0, 80) : "",
+      fileName: isMedia ? String(input.fileName || "").slice(0, 120) : "",
       duration: isVoice ? Math.max(0, Number(input.duration) || 0) : 0,
       createdAt: new Date().toISOString(),
     };
-    if (!message.text && !message.audioUrl) {
+    if (!message.text && !message.audioUrl && !message.mediaUrl) {
       sendJson(res, 400, { error: "消息不能为空。" });
       return;
     }

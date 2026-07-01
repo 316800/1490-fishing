@@ -83,6 +83,25 @@
         gap: 7px;
       }
 
+      .language-row {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 8px;
+        align-items: center;
+      }
+
+      .language-row label {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .language-row select {
+        min-height: 34px;
+        padding: 0 10px;
+        font-size: 13px;
+      }
+
       .sidebar-tabs {
         position: sticky;
         top: -18px;
@@ -320,6 +339,37 @@
 
       .chat-bubble strong {
         color: #40546c;
+        font-size: 12px;
+      }
+
+      .chat-bubble img,
+      .chat-bubble video {
+        display: block;
+        width: min(260px, 100%);
+        max-height: 260px;
+        object-fit: cover;
+        border: 1px solid #dce5ed;
+        border-radius: 8px;
+      }
+
+      .wechat-composer {
+        display: grid;
+        gap: 8px;
+        padding: 10px;
+        background: #ffffff;
+        border: 1px solid #dce5ed;
+        border-radius: 8px;
+      }
+
+      .wechat-tools {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .wechat-tools button {
+        min-height: 36px;
+        padding: 0 8px;
         font-size: 12px;
       }
 
@@ -1423,16 +1473,24 @@
     <main class="app">
       <aside class="sidebar" aria-label="控制面板">
         <section class="brand">
-          <h1>1490钓鱼天气与潮汐预测系统</h1>
+          <h1 data-i18n="appTitle">1490钓鱼天气与潮汐预测系统</h1>
+          <div class="language-row">
+            <label for="languageSelect" data-i18n="language">语言</label>
+            <select id="languageSelect">
+              <option value="zh">中文</option>
+              <option value="en">English</option>
+              <option value="es">Español</option>
+            </select>
+          </div>
         </section>
 
         <nav class="sidebar-tabs" aria-label="功能分区">
-          <button class="sidebar-tab active" type="button" data-sidebar-tab="spot">钓点</button>
-          <button class="sidebar-tab" type="button" data-sidebar-tab="personal">我的</button>
-          <button class="sidebar-tab" type="button" data-sidebar-tab="community">社区</button>
-          <button class="sidebar-tab" type="button" data-sidebar-tab="groups">群聊</button>
-          <button class="sidebar-tab" type="button" data-sidebar-tab="assistant">助手</button>
-          <button class="sidebar-tab" type="button" data-sidebar-tab="account">账号</button>
+          <button class="sidebar-tab active" type="button" data-sidebar-tab="spot" data-i18n="tabSpot">钓点</button>
+          <button class="sidebar-tab" type="button" data-sidebar-tab="personal" data-i18n="tabMine">我的</button>
+          <button class="sidebar-tab" type="button" data-sidebar-tab="community" data-i18n="tabCommunity">社区</button>
+          <button class="sidebar-tab" type="button" data-sidebar-tab="groups" data-i18n="tabGroups">群聊</button>
+          <button class="sidebar-tab" type="button" data-sidebar-tab="assistant" data-i18n="tabAssistant">助手</button>
+          <button class="sidebar-tab" type="button" data-sidebar-tab="account" data-i18n="tabAccount">账号</button>
         </nav>
 
         <div class="sidebar-panel active" data-sidebar-panel="spot">
@@ -1675,17 +1733,24 @@
         <section class="group">
           <h2 id="activeGroupTitle">群消息</h2>
           <div class="chat-window" id="groupChat" aria-live="polite"></div>
-          <div class="field">
-            <label for="groupMessage">发送消息</label>
-            <textarea id="groupMessage" placeholder="像微信群一样发鱼情、问路况、约钓或分享当前钓点。"></textarea>
-          </div>
-          <div class="actions">
-            <button id="sendGroupMessage" type="button">发送</button>
-            <button id="sharePointToGroup" class="secondary" type="button">分享当前钓点</button>
-          </div>
-          <div class="voice-controls">
-            <button id="recordVoiceMessage" class="secondary" type="button">按一下开始录音</button>
-            <span class="voice-status" id="voiceStatus">可发送语音消息。</span>
+          <div class="wechat-composer">
+            <div class="field">
+              <label for="groupMessage" data-i18n="chatMessage">发送消息</label>
+              <textarea id="groupMessage" data-i18n-placeholder="chatPlaceholder" placeholder="像微信群一样发鱼情、问路况、约钓或分享当前钓点。"></textarea>
+            </div>
+            <div class="actions">
+              <button id="sendGroupMessage" type="button" data-i18n="send">发送</button>
+              <button id="sharePointToGroup" class="secondary" type="button" data-i18n="sharePoint">分享当前钓点</button>
+            </div>
+            <div class="wechat-tools">
+              <button id="sendGroupImage" class="secondary" type="button" data-i18n="sendImage">图片</button>
+              <button id="sendGroupVideo" class="secondary" type="button" data-i18n="sendVideo">视频</button>
+              <button id="recordVoiceMessage" class="secondary" type="button" data-i18n="startVoice">语音</button>
+              <button id="sharePointToGroupTool" class="secondary" type="button" data-i18n="location">位置</button>
+            </div>
+            <input id="groupImageInput" class="file-hidden" type="file" accept="image/*" />
+            <input id="groupVideoInput" class="file-hidden" type="file" accept="video/*" />
+            <span class="voice-status" id="voiceStatus" data-i18n="voiceReady">可发送语音消息。</span>
           </div>
         </section>
         </div>
@@ -1905,6 +1970,7 @@
     <script>
       const els = {
         mapKey: document.querySelector("#mapKey"),
+        languageSelect: document.querySelector("#languageSelect"),
         pointKey: document.querySelector("#pointKey"),
         openAdminSettings: document.querySelector("#openAdminSettings"),
         closeAdminSettings: document.querySelector("#closeAdminSettings"),
@@ -1947,6 +2013,11 @@
         groupMessage: document.querySelector("#groupMessage"),
         sendGroupMessage: document.querySelector("#sendGroupMessage"),
         sharePointToGroup: document.querySelector("#sharePointToGroup"),
+        sharePointToGroupTool: document.querySelector("#sharePointToGroupTool"),
+        sendGroupImage: document.querySelector("#sendGroupImage"),
+        sendGroupVideo: document.querySelector("#sendGroupVideo"),
+        groupImageInput: document.querySelector("#groupImageInput"),
+        groupVideoInput: document.querySelector("#groupVideoInput"),
         recordVoiceMessage: document.querySelector("#recordVoiceMessage"),
         voiceStatus: document.querySelector("#voiceStatus"),
         status: document.querySelector("#status"),
@@ -2030,6 +2101,71 @@
       const NOAA_STATIONS_URL = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions";
       const FORECAST_REFRESH_MS = 30 * 60 * 1000;
       const DEG = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+      const I18N = {
+        zh: {
+          appTitle: "1490钓鱼天气与潮汐预测系统",
+          language: "语言",
+          tabSpot: "钓点",
+          tabMine: "我的",
+          tabCommunity: "社区",
+          tabGroups: "群聊",
+          tabAssistant: "助手",
+          tabAccount: "账号",
+          chatMessage: "发送消息",
+          chatPlaceholder: "像微信群一样发鱼情、问路况、约钓或分享当前钓点。",
+          send: "发送",
+          sharePoint: "分享当前钓点",
+          sendImage: "图片",
+          sendVideo: "视频",
+          startVoice: "语音",
+          stopVoice: "停止并发送",
+          location: "位置",
+          voiceReady: "可发送语音消息。",
+          voiceRecording: "正在录音...",
+        },
+        en: {
+          appTitle: "1490 Fishing Weather & Tide Forecast",
+          language: "Language",
+          tabSpot: "Spot",
+          tabMine: "Mine",
+          tabCommunity: "Community",
+          tabGroups: "Chat",
+          tabAssistant: "Help",
+          tabAccount: "Account",
+          chatMessage: "Message",
+          chatPlaceholder: "Share fishing reports, ask conditions, plan trips, or send this spot.",
+          send: "Send",
+          sharePoint: "Share spot",
+          sendImage: "Photo",
+          sendVideo: "Video",
+          startVoice: "Voice",
+          stopVoice: "Stop & send",
+          location: "Location",
+          voiceReady: "Voice messages are available.",
+          voiceRecording: "Recording...",
+        },
+        es: {
+          appTitle: "1490 Pesca: clima y mareas",
+          language: "Idioma",
+          tabSpot: "Lugar",
+          tabMine: "Mío",
+          tabCommunity: "Comunidad",
+          tabGroups: "Chat",
+          tabAssistant: "Ayuda",
+          tabAccount: "Cuenta",
+          chatMessage: "Mensaje",
+          chatPlaceholder: "Comparte pesca, pregunta condiciones, coordina salidas o envía este lugar.",
+          send: "Enviar",
+          sharePoint: "Enviar lugar",
+          sendImage: "Foto",
+          sendVideo: "Video",
+          startVoice: "Voz",
+          stopVoice: "Detener y enviar",
+          location: "Ubicación",
+          voiceReady: "Puedes enviar mensajes de voz.",
+          voiceRecording: "Grabando...",
+        },
+      };
       const TIDE_STATIONS = [
         { id: "8515921", name: "Lloyd Harbor, Huntington Bay", lat: 40.91, lon: -73.4317, shore: "北岸" },
         { id: "8516061", name: "Cold Spring Harbor", lat: 40.8733, lon: -73.47, shore: "北岸" },
@@ -2093,6 +2229,7 @@
       let openTideModalAfterForecast = false;
       let mapPanUnlocked = false;
       let mapPanLockTimer = null;
+      let currentLanguage = localStorage.getItem("fishing_language_v1") || "zh";
       const FISH_CATALOG = [
         { name: "Striped bass", aliases: ["striper", "bass"], habitat: "salt", local: 10, months: [4, 5, 6, 9, 10, 11], note: "长岛春秋主力鱼" },
         { name: "Fluke", aliases: ["summer flounder"], habitat: "salt", local: 9, months: [5, 6, 7, 8, 9], note: "夏季湾口和沙底常见" },
@@ -2226,6 +2363,7 @@
       ];
 
       restoreSavedState();
+      applyLanguage(currentLanguage);
       updateCoordinates(parseNumber(els.startLat, 40.908), parseNumber(els.startLon, -73.454));
       userProfile = loadProfile();
       els.nickname.value = userProfile.nickname;
@@ -2251,6 +2389,30 @@
         els.mapKey.value = localStorage.getItem("weatherapi_key") || "";
         els.pointKey.value = localStorage.getItem("stormglass_key") || "";
         els.tideStation.value = localStorage.getItem("noaa_tide_station") || "8516945";
+        els.languageSelect.value = currentLanguage;
+      }
+
+      function t(key) {
+        return I18N[currentLanguage]?.[key] || I18N.zh[key] || key;
+      }
+
+      function applyLanguage(language) {
+        currentLanguage = I18N[language] ? language : "zh";
+        localStorage.setItem("fishing_language_v1", currentLanguage);
+        document.documentElement.lang = currentLanguage === "zh" ? "zh-CN" : currentLanguage;
+        if (els.languageSelect) els.languageSelect.value = currentLanguage;
+        document.querySelectorAll("[data-i18n]").forEach((node) => {
+          node.textContent = t(node.dataset.i18n);
+        });
+        document.querySelectorAll("[data-i18n-placeholder]").forEach((node) => {
+          node.setAttribute("placeholder", t(node.dataset.i18nPlaceholder));
+        });
+        if (els.recordVoiceMessage && (!voiceRecorder || voiceRecorder.state !== "recording")) {
+          els.recordVoiceMessage.textContent = t("startVoice");
+        }
+        if (els.voiceStatus && !els.voiceStatus.classList.contains("recording")) {
+          els.voiceStatus.textContent = t("voiceReady");
+        }
       }
 
       function loadProfile() {
@@ -2396,14 +2558,19 @@
             members: Array.isArray(group.members) ? group.members.slice(0, 80) : [],
             messages: Array.isArray(group.messages)
               ? group.messages
-                  .filter((message) => message && (message.text || message.audioUrl))
+                  .filter((message) => message && (message.text || message.audioUrl || message.mediaUrl))
                   .slice(-80)
                   .map((message) => ({
                     id: message.id || crypto.randomUUID(),
                     author: message.author || "钓友",
-                    kind: message.kind === "voice" || message.audioUrl ? "voice" : "text",
+                    kind: ["voice", "image", "video", "location"].includes(message.kind) || message.audioUrl
+                      ? (message.audioUrl ? "voice" : message.kind)
+                      : "text",
                     text: String(message.text || "").slice(0, 1000),
                     audioUrl: String(message.audioUrl || "").slice(0, 700000),
+                    mediaUrl: String(message.mediaUrl || "").slice(0, 1200000),
+                    mimeType: String(message.mimeType || "").slice(0, 80),
+                    fileName: String(message.fileName || "").slice(0, 120),
                     duration: Math.max(0, Number(message.duration) || 0),
                     createdAt: message.createdAt || new Date().toISOString(),
                   }))
@@ -5169,10 +5336,7 @@
           ? group.messages
               .map((message) => {
                 const mine = message.author === userProfile.nickname || message.author === currentUser?.nickname;
-                const body = message.kind === "voice"
-                  ? `<audio class="voice-player" controls preload="metadata" src="${escapeHtml(message.audioUrl || "")}"></audio>
-                    <span class="spot-meta">语音 ${formatVoiceDuration(message.duration)}</span>`
-                  : `<span>${escapeHtml(message.text || "")}</span>`;
+                const body = renderGroupMessageBody(message);
                 return `<div class="chat-bubble ${mine ? "mine" : ""}">
                   <strong>${escapeHtml(message.author || "钓友")} · ${formatDateTime(new Date(message.createdAt))}</strong>
                   ${body}
@@ -5181,6 +5345,25 @@
               .join("")
           : '<p class="hint">这个群还没有消息。可以发鱼情、问潮汐、约钓或分享当前钓点。</p>';
         els.groupChat.scrollTop = els.groupChat.scrollHeight;
+      }
+
+      function renderGroupMessageBody(message) {
+        if (message.kind === "voice") {
+          return `<audio class="voice-player" controls preload="metadata" src="${escapeHtml(message.audioUrl || "")}"></audio>
+            <span class="spot-meta">语音 ${formatVoiceDuration(message.duration)}</span>`;
+        }
+        if (message.kind === "image") {
+          return `<img src="${escapeHtml(message.mediaUrl || "")}" alt="${escapeHtml(message.fileName || "group image")}" />
+            ${message.text ? `<span>${escapeHtml(message.text)}</span>` : ""}`;
+        }
+        if (message.kind === "video") {
+          return `<video controls preload="metadata" src="${escapeHtml(message.mediaUrl || "")}"></video>
+            <span class="spot-meta">${escapeHtml(message.fileName || "视频消息")}</span>`;
+        }
+        if (message.kind === "location") {
+          return `<span>${escapeHtml(message.text || "")}</span>`;
+        }
+        return `<span>${escapeHtml(message.text || "")}</span>`;
       }
 
       function selectChatGroup(groupId) {
@@ -5246,12 +5429,22 @@
         });
       }
 
-      async function sendGroupVoiceMessage(audioUrl, duration) {
+      async function sendGroupPayload(message) {
         const group = activeChatGroup();
         if (!group) {
           setStatus("请先选择或创建一个交流群。", "warning");
           return;
         }
+        group.messages.push(message);
+        group.messages = group.messages.slice(-80);
+        group.updatedAt = message.createdAt;
+        group.members = Array.from(new Set([...(group.members || []), message.author]));
+        persistChatGroups();
+        renderChatGroups();
+        await syncGroupMessageToBackend(group.id, message);
+      }
+
+      async function sendGroupVoiceMessage(audioUrl, duration) {
         const message = {
           id: crypto.randomUUID(),
           author: userProfile.nickname || currentUser?.nickname || "钓友",
@@ -5261,14 +5454,36 @@
           duration,
           createdAt: new Date().toISOString(),
         };
-        group.messages.push(message);
-        group.messages = group.messages.slice(-80);
-        group.updatedAt = message.createdAt;
-        group.members = Array.from(new Set([...(group.members || []), message.author]));
-        persistChatGroups();
-        renderChatGroups();
-        await syncGroupMessageToBackend(group.id, message);
+        await sendGroupPayload(message);
         setStatus("语音消息已发送。", "good");
+      }
+
+      async function sendGroupMediaMessage(file, kind) {
+        if (!activeChatGroup()) {
+          setStatus("请先选择或创建一个交流群。", "warning");
+          return;
+        }
+        if (!file) return;
+        const maxSize = kind === "video" ? 1_000_000 : 850_000;
+        if (file.size > maxSize) {
+          setStatus(kind === "video" ? "视频太大，请先发送 1MB 内的短视频。" : "图片太大，请先压缩到 850KB 内。", "warning");
+          return;
+        }
+        const mediaUrl = await blobToDataUrl(file);
+        const message = {
+          id: crypto.randomUUID(),
+          author: userProfile.nickname || currentUser?.nickname || "钓友",
+          kind,
+          text: kind === "image" ? "图片" : "视频",
+          mediaUrl,
+          mimeType: file.type || "",
+          fileName: file.name || (kind === "image" ? "image" : "video"),
+          audioUrl: "",
+          duration: 0,
+          createdAt: new Date().toISOString(),
+        };
+        await sendGroupPayload(message);
+        setStatus(kind === "image" ? "图片已发送。" : "视频已发送。", "good");
       }
 
       async function finishVoiceRecording() {
@@ -5300,7 +5515,7 @@
           voiceRecorder.addEventListener("stop", async () => {
             const duration = Math.max(1, (Date.now() - voiceStartedAt) / 1000);
             stopVoiceTracks();
-            els.recordVoiceMessage.textContent = "按一下开始录音";
+            els.recordVoiceMessage.textContent = t("startVoice");
             els.voiceStatus.textContent = "正在发送语音...";
             els.voiceStatus.classList.remove("recording");
             const mimeType = voiceRecorder?.mimeType || "audio/webm";
@@ -5321,14 +5536,14 @@
             els.voiceStatus.textContent = "可发送语音消息。";
           });
           voiceRecorder.start();
-          els.recordVoiceMessage.textContent = "停止并发送";
-          els.voiceStatus.textContent = "正在录音...";
+          els.recordVoiceMessage.textContent = t("stopVoice");
+          els.voiceStatus.textContent = t("voiceRecording");
           els.voiceStatus.classList.add("recording");
           setStatus("正在录音，点“停止并发送”即可发到群里。", "good");
         } catch {
           stopVoiceTracks();
           voiceRecorder = null;
-          els.recordVoiceMessage.textContent = "按一下开始录音";
+          els.recordVoiceMessage.textContent = t("startVoice");
           els.voiceStatus.textContent = "麦克风权限未开启。";
           els.voiceStatus.classList.remove("recording");
           setStatus("无法录音。请允许浏览器麦克风权限，并使用 HTTPS 打开网站。", "warning");
@@ -5352,17 +5567,14 @@
           kind: "text",
           text: text.slice(0, 1000),
           audioUrl: "",
+          mediaUrl: "",
+          mimeType: "",
+          fileName: "",
           duration: 0,
           createdAt: new Date().toISOString(),
         };
-        group.messages.push(message);
-        group.messages = group.messages.slice(-80);
-        group.updatedAt = message.createdAt;
-        group.members = Array.from(new Set([...(group.members || []), message.author]));
         els.groupMessage.value = options.keepInput ? els.groupMessage.value : "";
-        persistChatGroups();
-        renderChatGroups();
-        await syncGroupMessageToBackend(group.id, message);
+        await sendGroupPayload(message);
         setStatus("群消息已发送。", "good");
       }
 
@@ -5757,6 +5969,7 @@
 
       els.loadMap.addEventListener("click", initMap);
       els.toggleMapPan.addEventListener("click", toggleMapPanMode);
+      els.languageSelect.addEventListener("change", () => applyLanguage(els.languageSelect.value));
       els.fetchForecast.addEventListener("click", updateAllData);
       els.clearKeys.addEventListener("click", clearKeys);
       els.sidebarTabs.forEach((tab) => {
@@ -5792,12 +6005,25 @@
       });
       els.sendGroupMessage.addEventListener("click", () => sendGroupMessage());
       els.recordVoiceMessage.addEventListener("click", toggleVoiceRecording);
+      els.sendGroupImage.addEventListener("click", () => els.groupImageInput.click());
+      els.sendGroupVideo.addEventListener("click", () => els.groupVideoInput.click());
+      els.groupImageInput.addEventListener("change", () => {
+        const file = els.groupImageInput.files?.[0];
+        els.groupImageInput.value = "";
+        sendGroupMediaMessage(file, "image");
+      });
+      els.groupVideoInput.addEventListener("change", () => {
+        const file = els.groupVideoInput.files?.[0];
+        els.groupVideoInput.value = "";
+        sendGroupMediaMessage(file, "video");
+      });
       els.groupMessage.addEventListener("keydown", (event) => {
         if (event.key !== "Enter" || event.shiftKey) return;
         event.preventDefault();
         sendGroupMessage();
       });
       els.sharePointToGroup.addEventListener("click", shareCurrentPointToGroup);
+      els.sharePointToGroupTool.addEventListener("click", shareCurrentPointToGroup);
       els.useCurrentLocation.addEventListener("click", useCurrentLocation);
       els.saveSpot.addEventListener("click", saveCurrentSpot);
       els.publishTip.addEventListener("click", publishTip);
