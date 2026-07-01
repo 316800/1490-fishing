@@ -10,6 +10,7 @@ const dataDir = path.join(root, "data");
 const dbPath = path.join(dataDir, "db.json");
 const sessionCookieName = "fishing_session";
 const passwordIterations = 120_000;
+const defaultAdminEmails = ["61654733@qq.com"];
 
 const mimeTypes = {
   ".css": "text/css; charset=utf-8",
@@ -156,7 +157,9 @@ function normalizeEmail(value = "") {
 
 function configuredAdminEmails() {
   return new Set(
-    String(process.env.ADMIN_EMAILS || "")
+    [defaultAdminEmails.join(","), process.env.ADMIN_EMAILS || ""]
+      .filter(Boolean)
+      .join(",")
       .split(",")
       .map(normalizeEmail)
       .filter(Boolean),
