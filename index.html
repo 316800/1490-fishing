@@ -2345,7 +2345,7 @@
 
       function initMap() {
         if (baseMap) {
-          const zoom = Math.max(3, Math.min(14, parseNumber(els.zoom, baseMap.getZoom?.() || 10)));
+          const zoom = Math.max(3, Math.min(19, baseMap.getZoom?.() || parseNumber(els.zoom, 10)));
           baseMap.setView([selectedPoint.lat, selectedPoint.lon], zoom);
           placeCrosshair(baseMap, selectedPoint.lat, selectedPoint.lon);
           resizeWindCanvas();
@@ -2385,6 +2385,7 @@
           autoLoadMapAndForecast(250);
         });
         baseMap.on("zoomend moveend", () => {
+          els.zoom.value = String(baseMap.getZoom?.() || els.zoom.value);
           resizeWindCanvas();
           seedWindParticles();
         });
