@@ -169,6 +169,47 @@
         gap: 7px;
       }
 
+      .photo-upload-card {
+        display: grid;
+        gap: 10px;
+        padding: 12px;
+        background: #ffffff;
+        border: 1px solid #d6e2ec;
+        border-radius: 8px;
+      }
+
+      .photo-upload-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .photo-upload-head strong {
+        font-size: 14px;
+      }
+
+      .file-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+
+      .photo-file-name {
+        min-height: 28px;
+        padding: 6px 8px;
+        color: #40546c;
+        background: #f6f9fc;
+        border: 1px solid #e0e8ef;
+        border-radius: 7px;
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+
       .suggestions {
         position: absolute;
         top: calc(100% + 4px);
@@ -1236,17 +1277,22 @@
 
         <section class="group">
           <h2>鱼照识别 / 规则助手</h2>
-          <div class="field">
-            <label for="fishPhotoCamera">现场拍照</label>
-            <input id="fishPhotoCamera" accept="image/*" capture="environment" type="file" />
-          </div>
-          <div class="field">
-            <label for="fishPhotoAlbum">相册上传</label>
-            <input id="fishPhotoAlbum" accept="image/*" type="file" />
-          </div>
-          <div class="field">
-            <label for="fishPhotoHint">鱼种线索</label>
-            <input id="fishPhotoHint" placeholder="可选：例如 striped bass / fluke / porgy" />
+          <div class="photo-upload-card">
+            <div class="photo-upload-head">
+              <strong>上传鱼照</strong>
+              <span class="hint">拍照或选相册</span>
+            </div>
+            <input id="fishPhotoCamera" class="file-hidden" accept="image/*" capture="environment" type="file" />
+            <input id="fishPhotoAlbum" class="file-hidden" accept="image/*" type="file" />
+            <div class="actions">
+              <button id="openFishCamera" class="secondary" type="button">现场拍照</button>
+              <button id="openFishAlbum" class="secondary" type="button">相册上传</button>
+            </div>
+            <div id="fishPhotoFileName" class="photo-file-name">尚未选择鱼照。</div>
+            <div class="field">
+              <label for="fishPhotoHint">鱼种线索</label>
+              <input id="fishPhotoHint" placeholder="可选：例如 striped bass / fluke / porgy" />
+            </div>
           </div>
           <div class="actions">
             <button id="analyzeFishPhoto" type="button">识别鱼种与规则</button>
@@ -1705,6 +1751,9 @@
         saveCatch: document.querySelector("#saveCatch"),
         fishPhotoCamera: document.querySelector("#fishPhotoCamera"),
         fishPhotoAlbum: document.querySelector("#fishPhotoAlbum"),
+        openFishCamera: document.querySelector("#openFishCamera"),
+        openFishAlbum: document.querySelector("#openFishAlbum"),
+        fishPhotoFileName: document.querySelector("#fishPhotoFileName"),
         fishPhotoHint: document.querySelector("#fishPhotoHint"),
         analyzeFishPhoto: document.querySelector("#analyzeFishPhoto"),
         fishPhotoResult: document.querySelector("#fishPhotoResult"),
@@ -4418,13 +4467,20 @@
         return els.fishPhotoCamera.files?.[0] || els.fishPhotoAlbum.files?.[0] || null;
       }
 
+      function renderSelectedFishPhotoFile() {
+        const file = selectedFishPhotoFile();
+        els.fishPhotoFileName.textContent = file ? `已选择：${file.name}` : "尚未选择鱼照。";
+      }
+
       function syncFishPhotoSource(source) {
         if (source === "camera" && els.fishPhotoCamera.files?.length) {
           els.fishPhotoAlbum.value = "";
+          renderSelectedFishPhotoFile();
           setStatus("已选择现场拍照鱼照，可识别鱼种与规则。", "good");
         }
         if (source === "album" && els.fishPhotoAlbum.files?.length) {
           els.fishPhotoCamera.value = "";
+          renderSelectedFishPhotoFile();
           setStatus("已选择相册鱼照，可识别鱼种与规则。", "good");
         }
       }
@@ -4998,6 +5054,8 @@
       syncBestWindow();
       els.generateCatchReport.addEventListener("click", generateCatchReport);
       els.saveCatch.addEventListener("click", saveCatchLog);
+      els.openFishCamera.addEventListener("click", () => els.fishPhotoCamera.click());
+      els.openFishAlbum.addEventListener("click", () => els.fishPhotoAlbum.click());
       els.fishPhotoCamera.addEventListener("change", () => syncFishPhotoSource("camera"));
       els.fishPhotoAlbum.addEventListener("change", () => syncFishPhotoSource("album"));
       els.analyzeFishPhoto.addEventListener("click", analyzeFishPhoto);
