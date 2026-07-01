@@ -88,7 +88,7 @@
         top: -18px;
         z-index: 20;
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 6px;
         margin: -2px 0 0;
         padding: 8px 0 10px;
@@ -208,6 +208,56 @@
         border-radius: 7px;
         font-size: 12px;
         overflow-wrap: anywhere;
+      }
+
+      .assistant-chat {
+        display: grid;
+        gap: 8px;
+        max-height: 320px;
+        overflow-y: auto;
+        padding: 8px;
+        background: #ffffff;
+        border: 1px solid #dce5ed;
+        border-radius: 8px;
+      }
+
+      .assistant-message {
+        display: grid;
+        gap: 4px;
+        padding: 9px 10px;
+        border: 1px solid #e1e8ef;
+        border-radius: 8px;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .assistant-message.user {
+        margin-left: 24px;
+        background: #edf8fb;
+        border-color: #cbe3e9;
+      }
+
+      .assistant-message.bot {
+        margin-right: 24px;
+        background: #fbfdff;
+      }
+
+      .assistant-message strong {
+        font-size: 12px;
+        color: #40546c;
+      }
+
+      .quick-help {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+      }
+
+      .quick-help button {
+        width: auto;
+        min-height: 31px;
+        padding: 0 9px;
+        font-size: 12px;
       }
 
       .suggestions {
@@ -1179,13 +1229,13 @@
         }
 
         .sidebar-tabs {
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-template-columns: repeat(5, minmax(0, 1fr));
           top: -18px;
         }
 
         .sidebar-tab {
           min-height: 34px;
-          padding: 0 6px;
+          padding: 0 4px;
           font-size: 12px;
         }
 
@@ -1254,6 +1304,7 @@
           <button class="sidebar-tab active" type="button" data-sidebar-tab="spot">钓点</button>
           <button class="sidebar-tab" type="button" data-sidebar-tab="personal">我的</button>
           <button class="sidebar-tab" type="button" data-sidebar-tab="community">社区</button>
+          <button class="sidebar-tab" type="button" data-sidebar-tab="assistant">助手</button>
           <button class="sidebar-tab" type="button" data-sidebar-tab="account">账号</button>
         </nav>
 
@@ -1475,6 +1526,30 @@
             <textarea id="commentText" placeholder="问问题、补充鱼情、验证这个钓点是否有效。"></textarea>
           </div>
           <button id="postComment" type="button">发布评论</button>
+        </section>
+        </div>
+
+        <div class="sidebar-panel" data-sidebar-panel="assistant">
+        <section class="group">
+          <h2>帮助 / AI 助手</h2>
+          <div class="assistant-chat" id="assistantChat" aria-live="polite">
+            <div class="assistant-message bot">
+              <strong>助手</strong>
+              <span>可以问我：怎么看潮汐黄金窗口、风向风速代表什么、怎么保存钓点、怎么上传鱼照。</span>
+            </div>
+          </div>
+          <div class="quick-help">
+            <button class="secondary" type="button" data-help-question="怎么看潮汐黄金窗口？">潮汐怎么看</button>
+            <button class="secondary" type="button" data-help-question="风向和风速怎么判断？">风向风速</button>
+            <button class="secondary" type="button" data-help-question="怎么保存我的钓点？">保存钓点</button>
+            <button class="secondary" type="button" data-help-question="鱼照识别怎么用？">鱼照识别</button>
+          </div>
+          <div class="field">
+            <label for="assistantQuestion">直接提问</label>
+            <input id="assistantQuestion" placeholder="例如：今天适不适合钓 fluke？" />
+          </div>
+          <button id="askAssistant" type="button">询问助手</button>
+          <p class="hint">当前为本地规则助手；正式版可接入 AI 模型，根据钓点、天气、潮汐和鱼种给出更细建议。</p>
         </section>
         </div>
 
@@ -1759,6 +1834,9 @@
         fishPhotoResult: document.querySelector("#fishPhotoResult"),
         commentText: document.querySelector("#commentText"),
         postComment: document.querySelector("#postComment"),
+        assistantChat: document.querySelector("#assistantChat"),
+        assistantQuestion: document.querySelector("#assistantQuestion"),
+        askAssistant: document.querySelector("#askAssistant"),
         mySpots: document.querySelector("#mySpots"),
         publicSpots: document.querySelector("#publicSpots"),
         fishFeed: document.querySelector("#fishFeed"),
@@ -4995,6 +5073,56 @@
         setStatus(added > 0 ? `已导入 ${added} 个公开钓点。` : "公开钓点已经在资料库中。", "good");
       }
 
+      function assistantAnswer(question) {
+        const text = String(question || "").toLowerCase();
+        const row = selectedForecastRow();
+        const score = hourlyScores[selectedHourlyIndex];
+        const currentSpot = spots.find((item) => item.id === selectedSpotId);
+        const wind = row ? `当前所选小时风速 ${formatValue(row.wind, 1)} m/s，风向 ${directionLabel(row.windDir)}。` : "请先选择钓点并等待预报更新。";
+        const tide = tideHighLow.length
+          ? `潮汐曲线里橙色竖条是黄金窗口，通常围绕满潮前后、干潮后转流这些时间看。`
+          : "潮汐数据还没加载好，先点地图选择钓点。";
+        const place = currentSpot ? `当前钓点是 ${currentSpot.name}。` : `当前坐标是 ${selectedPoint.lat.toFixed(6)}, ${selectedPoint.lon.toFixed(6)}。`;
+
+        if (text.includes("潮") || text.includes("窗口")) {
+          return `${tide} 曲线越贴近黄金窗口、作钓指数越高，优先看那几个小时。点曲线上的小时，可以看到风、浪、雨和气压细节。`;
+        }
+        if (text.includes("风") || text.includes("浪")) {
+          return `${wind} 一般风小浪低更安全；迎风岸可能有鱼，但抛投和安全压力更大。地图风粒子看大方向，小时表看所选时间的具体风级。`;
+        }
+        if (text.includes("保存") || text.includes("钓点")) {
+          return `${place} 保存钓点要去“我的”页：填钓点名称、目标鱼、最佳窗口和经验说明，再点保存钓点。公开、关注者、深度关注者权限会影响别人看到的位置精度。`;
+        }
+        if (text.includes("鱼照") || text.includes("识别") || text.includes("照片") || text.includes("拍照")) {
+          return "在“钓点”页的鱼照识别栏，点现场拍照或相册上传，也可以输入鱼种线索。识别后会把鱼种、坐标、天气和规则提示写入钓获说明。正式版会接 AI 视觉模型。";
+        }
+        if (text.includes("适合") || text.includes("今天") || text.includes("能钓")) {
+          const scoreText = score ? `当前所选小时作钓指数约 ${score.score}，状态是“${score.label}”。` : "作钓指数还没生成。";
+          return `${scoreText} ${wind} 同时看降雨、浪高和潮汐黄金窗口；如果安全标签是浪小、风力合适，就比大风浪时更适合。`;
+        }
+        return `${place} 你可以问“潮汐怎么看”“风向风速怎么判断”“怎么保存钓点”“鱼照识别怎么用”。我会结合当前钓点、所选小时和已有预报给你解释。`;
+      }
+
+      function appendAssistantMessage(role, text) {
+        const label = role === "user" ? "你" : "助手";
+        els.assistantChat.insertAdjacentHTML(
+          "beforeend",
+          `<div class="assistant-message ${role}"><strong>${label}</strong><span>${escapeHtml(text)}</span></div>`,
+        );
+        els.assistantChat.scrollTop = els.assistantChat.scrollHeight;
+      }
+
+      function askAssistant(question = els.assistantQuestion.value) {
+        const trimmed = String(question || "").trim();
+        if (!trimmed) {
+          els.assistantQuestion.focus();
+          return;
+        }
+        appendAssistantMessage("user", trimmed);
+        appendAssistantMessage("bot", assistantAnswer(trimmed));
+        els.assistantQuestion.value = "";
+      }
+
       function escapeHtml(value) {
         return String(value || "")
           .replaceAll("&", "&amp;")
@@ -5060,6 +5188,15 @@
       els.fishPhotoAlbum.addEventListener("change", () => syncFishPhotoSource("album"));
       els.analyzeFishPhoto.addEventListener("click", analyzeFishPhoto);
       els.postComment.addEventListener("click", postComment);
+      els.askAssistant.addEventListener("click", () => askAssistant());
+      els.assistantQuestion.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        askAssistant();
+      });
+      document.querySelectorAll("[data-help-question]").forEach((button) => {
+        button.addEventListener("click", () => askAssistant(button.dataset.helpQuestion));
+      });
       els.mySpots.addEventListener("click", handleSpotAction);
       els.publicSpots.addEventListener("click", handleSpotAction);
       els.hourlyScoreChart.addEventListener("click", selectHourlyScore);
