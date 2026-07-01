@@ -508,8 +508,6 @@
 
       .crosshair {
         position: relative;
-        margin-left: -15px;
-        margin-top: -15px;
       }
 
       .fallback-pin::before,
@@ -2232,10 +2230,21 @@
         els.fallbackPin.style.top = `${yPercent}%`;
       }
 
+      function eventClientPoint(event) {
+        const source = event?.originalEvent || event;
+        const touch = source?.changedTouches?.[0] || source?.touches?.[0];
+        if (touch) return { x: touch.clientX, y: touch.clientY };
+        if (Number.isFinite(source?.clientX) && Number.isFinite(source?.clientY)) return { x: source.clientX, y: source.clientY };
+        if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) return { x: event.clientX, y: event.clientY };
+        return null;
+      }
+
       function selectFallbackPoint(event) {
         const rect = els.fallbackMap.getBoundingClientRect();
-        const x = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1);
-        const y = Math.min(Math.max((event.clientY - rect.top) / rect.height, 0), 1);
+        const point = eventClientPoint(event);
+        if (!point) return;
+        const x = Math.min(Math.max((point.x - rect.left) / rect.width, 0), 1);
+        const y = Math.min(Math.max((point.y - rect.top) / rect.height, 0), 1);
         const centerLat = parseNumber(els.startLat, 40.908);
         const centerLon = parseNumber(els.startLon, -73.454);
         const lat = centerLat + (0.5 - y) * 0.18;
@@ -2258,6 +2267,13 @@
           return;
         }
         marker.setLatLng([lat, lon]);
+      }
+
+      function mapLatLngFromPointer(map, event) {
+        const point = eventClientPoint(event);
+        if (!point) return event.latlng;
+        const rect = map.getContainer().getBoundingClientRect();
+        return map.containerPointToLatLng(L.point(point.x - rect.left, point.y - rect.top));
       }
 
       function canShowSpotOnMap(spot) {
@@ -2360,8 +2376,9 @@
         renderMapSpots();
         initWindParticles();
         baseMap.on("click", (event) => {
-          const pointLat = event.latlng.lat;
-          const pointLon = event.latlng.lng;
+          const latlng = mapLatLngFromPointer(baseMap, event);
+          const pointLat = latlng.lat;
+          const pointLon = latlng.lng;
           updateCoordinates(pointLat, pointLon);
           placeCrosshair(baseMap, pointLat, pointLon);
           setStatus("已选择钓点，正在自动更新预报。", "good");
