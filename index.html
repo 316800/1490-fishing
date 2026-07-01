@@ -520,6 +520,11 @@
         position: relative;
         width: 100%;
         height: 100%;
+        touch-action: pan-y;
+      }
+
+      #mapCanvas.map-unlocked {
+        touch-action: none;
       }
 
       .wind-particles {
@@ -547,6 +552,25 @@
         font-size: 13px;
         line-height: 1.45;
         backdrop-filter: blur(10px);
+      }
+
+      .map-lock-toggle {
+        position: absolute;
+        right: 16px;
+        bottom: 94px;
+        z-index: 460;
+        display: none;
+        width: auto;
+        min-height: 38px;
+        padding: 0 12px;
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 12px 30px rgba(26, 46, 75, 0.14);
+      }
+
+      .map-lock-toggle.unlocked {
+        color: #ffffff;
+        background: var(--sea);
+        border-color: var(--sea);
       }
 
       .map-score-chart {
@@ -1307,6 +1331,13 @@
         }
       }
 
+      @media (pointer: coarse) {
+        .map-lock-toggle {
+          display: inline-grid;
+          place-items: center;
+        }
+      }
+
       @media (max-width: 760px) {
         .app {
           grid-template-columns: 1fr;
@@ -1327,6 +1358,11 @@
           min-height: 34px;
           padding: 0 3px;
           font-size: 11px;
+        }
+
+        .map-lock-toggle {
+          display: inline-grid;
+          place-items: center;
         }
 
         .row,
@@ -1723,6 +1759,7 @@
           <canvas id="windParticles" class="wind-particles" aria-hidden="true"></canvas>
         </div>
         <div class="map-tip" id="mapTip">点击地图选择钓点；更新预报后生成指数和黄金窗口。</div>
+        <button id="toggleMapPan" class="map-lock-toggle" type="button">移动地图</button>
       </section>
 
       <aside class="dashboard" aria-label="预报与指数">
@@ -1914,6 +1951,7 @@
         voiceStatus: document.querySelector("#voiceStatus"),
         status: document.querySelector("#status"),
         mapTip: document.querySelector("#mapTip"),
+        toggleMapPan: document.querySelector("#toggleMapPan"),
         mapCanvas: document.querySelector("#mapCanvas"),
         windParticles: document.querySelector("#windParticles"),
         fallbackMap: document.querySelector("#fallbackMap"),
@@ -2053,6 +2091,8 @@
       let autoRefreshTimer = null;
       let forecastIntervalTimer = null;
       let openTideModalAfterForecast = false;
+      let mapPanUnlocked = false;
+      let mapPanLockTimer = null;
       const FISH_CATALOG = [
         { name: "Striped bass", aliases: ["striper", "bass"], habitat: "salt", local: 10, months: [4, 5, 6, 9, 10, 11], note: "长岛春秋主力鱼" },
         { name: "Fluke", aliases: ["summer flounder"], habitat: "salt", local: 9, months: [5, 6, 7, 8, 9], note: "夏季湾口和沙底常见" },
@@ -2720,6 +2760,7 @@
           placeCrosshair(baseMap, selectedPoint.lat, selectedPoint.lon);
           resizeWindCanvas();
           seedWindParticles();
+          applyMapPanMode();
           setStatus("OpenStreetMap 地图已载入。", "good");
           return;
         }
@@ -2760,8 +2801,62 @@
           resizeWindCanvas();
           seedWindParticles();
         });
+        applyMapPanMode();
         els.loadMap.disabled = false;
         setStatus("OpenStreetMap 地图已载入。", "good");
+      }
+
+      function isSmallTouchScreen() {
+        return window.matchMedia("(max-width: 760px), (pointer: coarse)").matches;
+      }
+
+      function setLeafletInteraction(handlerName, enabled) {
+        const handler = baseMap?.[handlerName];
+        if (!handler) return;
+        if (enabled) handler.enable();
+        else handler.disable();
+      }
+
+      function applyMapPanMode() {
+        const shouldLock = isSmallTouchScreen() && !mapPanUnlocked;
+        els.mapCanvas.classList.toggle("map-unlocked", !shouldLock);
+        els.toggleMapPan.classList.toggle("unlocked", !shouldLock);
+        els.toggleMapPan.textContent = shouldLock ? "移动地图" : "锁定地图";
+        els.toggleMapPan.setAttribute("aria-pressed", shouldLock ? "false" : "true");
+        if (!baseMap) return;
+        setLeafletInteraction("dragging", !shouldLock);
+        setLeafletInteraction("touchZoom", !shouldLock);
+        setLeafletInteraction("doubleClickZoom", !shouldLock);
+        setLeafletInteraction("boxZoom", !shouldLock);
+        setLeafletInteraction("keyboard", !shouldLock);
+        setLeafletInteraction("scrollWheelZoom", false);
+      }
+
+      function unlockMapPanTemporarily() {
+        mapPanUnlocked = true;
+        applyMapPanMode();
+        clearTimeout(mapPanLockTimer);
+        mapPanLockTimer = setTimeout(() => {
+          mapPanUnlocked = false;
+          applyMapPanMode();
+        }, 8000);
+        setStatus("地图移动已开启，8 秒后自动锁定，方便继续上下滑页面。", "good");
+      }
+
+      function toggleMapPanMode() {
+        if (!isSmallTouchScreen()) {
+          mapPanUnlocked = !mapPanUnlocked;
+          applyMapPanMode();
+          return;
+        }
+        if (mapPanUnlocked) {
+          mapPanUnlocked = false;
+          clearTimeout(mapPanLockTimer);
+          applyMapPanMode();
+          setStatus("地图已锁定，现在可正常上下滑动页面。", "good");
+          return;
+        }
+        unlockMapPanTemporarily();
       }
 
       async function updateAllData() {
@@ -5661,6 +5756,7 @@
       }
 
       els.loadMap.addEventListener("click", initMap);
+      els.toggleMapPan.addEventListener("click", toggleMapPanMode);
       els.fetchForecast.addEventListener("click", updateAllData);
       els.clearKeys.addEventListener("click", clearKeys);
       els.sidebarTabs.forEach((tab) => {
@@ -5757,6 +5853,7 @@
         closeAdminSettings();
       });
       window.addEventListener("resize", () => {
+        applyMapPanMode();
         if (!els.tideModal.classList.contains("open")) return;
         resizeLargeTideCanvas();
         drawTideChart(els.tideChartLarge);
