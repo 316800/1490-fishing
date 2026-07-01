@@ -151,12 +151,15 @@ function normalizeDb(db) {
       members: Array.isArray(group.members) ? group.members.slice(0, 80).map((member) => String(member).slice(0, 60)) : [],
       messages: Array.isArray(group.messages)
         ? group.messages
-            .filter((message) => message && message.text)
+            .filter((message) => message && (message.text || message.audioUrl))
             .slice(-100)
             .map((message) => ({
               id: String(message.id || crypto.randomUUID()),
               author: String(message.author || "钓友").slice(0, 60),
+              kind: message.kind === "voice" || message.audioUrl ? "voice" : "text",
               text: String(message.text || "").slice(0, 1000),
+              audioUrl: String(message.audioUrl || "").slice(0, 700000),
+              duration: Math.max(0, Number(message.duration) || 0),
               createdAt: message.createdAt || new Date().toISOString(),
             }))
         : [],
@@ -539,7 +542,10 @@ async function handleApi(req, res) {
         ? input.messages.slice(-80).map((message) => ({
             id: message.id || crypto.randomUUID(),
             author: String(message.author || user.nickname).slice(0, 60),
+            kind: message.kind === "voice" || message.audioUrl ? "voice" : "text",
             text: String(message.text || "").slice(0, 1000),
+            audioUrl: String(message.audioUrl || "").slice(0, 700000),
+            duration: Math.max(0, Number(message.duration) || 0),
             createdAt: message.createdAt || new Date().toISOString(),
           }))
         : [],
@@ -579,13 +585,17 @@ async function handleApi(req, res) {
       return;
     }
     const input = await readJson(req);
+    const isVoice = input.kind === "voice" || input.audioUrl;
     const message = {
       id: input.id || crypto.randomUUID(),
       author: user.nickname,
+      kind: isVoice ? "voice" : "text",
       text: String(input.text || "").trim().slice(0, 1000),
+      audioUrl: isVoice ? String(input.audioUrl || "").slice(0, 700000) : "",
+      duration: isVoice ? Math.max(0, Number(input.duration) || 0) : 0,
       createdAt: new Date().toISOString(),
     };
-    if (!message.text) {
+    if (!message.text && !message.audioUrl) {
       sendJson(res, 400, { error: "消息不能为空。" });
       return;
     }

@@ -323,6 +323,33 @@
         font-size: 12px;
       }
 
+      .voice-controls {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .voice-controls button {
+        min-height: 38px;
+      }
+
+      .voice-status {
+        color: #40546c;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+
+      .voice-status.recording {
+        color: #b42318;
+        font-weight: 800;
+      }
+
+      .voice-player {
+        width: 240px;
+        max-width: 100%;
+      }
+
       .suggestions {
         position: absolute;
         top: calc(100% + 4px);
@@ -1620,6 +1647,10 @@
             <button id="sendGroupMessage" type="button">发送</button>
             <button id="sharePointToGroup" class="secondary" type="button">分享当前钓点</button>
           </div>
+          <div class="voice-controls">
+            <button id="recordVoiceMessage" class="secondary" type="button">按一下开始录音</button>
+            <span class="voice-status" id="voiceStatus">可发送语音消息。</span>
+          </div>
         </section>
         </div>
 
@@ -1879,6 +1910,8 @@
         groupMessage: document.querySelector("#groupMessage"),
         sendGroupMessage: document.querySelector("#sendGroupMessage"),
         sharePointToGroup: document.querySelector("#sharePointToGroup"),
+        recordVoiceMessage: document.querySelector("#recordVoiceMessage"),
+        voiceStatus: document.querySelector("#voiceStatus"),
         status: document.querySelector("#status"),
         mapTip: document.querySelector("#mapTip"),
         mapCanvas: document.querySelector("#mapCanvas"),
@@ -2001,6 +2034,10 @@
       let friendShares = [];
       let chatGroups = [];
       let activeGroupId = null;
+      let voiceRecorder = null;
+      let voiceChunks = [];
+      let voiceStartedAt = 0;
+      let voiceStream = null;
       let windParticleFrame = null;
       let windParticleResizeBound = false;
       let windParticles = [];
@@ -2319,12 +2356,15 @@
             members: Array.isArray(group.members) ? group.members.slice(0, 80) : [],
             messages: Array.isArray(group.messages)
               ? group.messages
-                  .filter((message) => message && message.text)
+                  .filter((message) => message && (message.text || message.audioUrl))
                   .slice(-80)
                   .map((message) => ({
                     id: message.id || crypto.randomUUID(),
                     author: message.author || "钓友",
+                    kind: message.kind === "voice" || message.audioUrl ? "voice" : "text",
                     text: String(message.text || "").slice(0, 1000),
+                    audioUrl: String(message.audioUrl || "").slice(0, 700000),
+                    duration: Math.max(0, Number(message.duration) || 0),
                     createdAt: message.createdAt || new Date().toISOString(),
                   }))
               : [],
@@ -5022,19 +5062,25 @@
           els.groupMessage.disabled = true;
           els.sendGroupMessage.disabled = true;
           els.sharePointToGroup.disabled = true;
+          els.recordVoiceMessage.disabled = true;
           return;
         }
         els.activeGroupTitle.textContent = group.name;
         els.groupMessage.disabled = false;
         els.sendGroupMessage.disabled = false;
         els.sharePointToGroup.disabled = false;
+        els.recordVoiceMessage.disabled = false;
         els.groupChat.innerHTML = group.messages.length
           ? group.messages
               .map((message) => {
                 const mine = message.author === userProfile.nickname || message.author === currentUser?.nickname;
+                const body = message.kind === "voice"
+                  ? `<audio class="voice-player" controls preload="metadata" src="${escapeHtml(message.audioUrl || "")}"></audio>
+                    <span class="spot-meta">语音 ${formatVoiceDuration(message.duration)}</span>`
+                  : `<span>${escapeHtml(message.text || "")}</span>`;
                 return `<div class="chat-bubble ${mine ? "mine" : ""}">
                   <strong>${escapeHtml(message.author || "钓友")} · ${formatDateTime(new Date(message.createdAt))}</strong>
-                  <span>${escapeHtml(message.text || "")}</span>
+                  ${body}
                 </div>`;
               })
               .join("")
@@ -5083,6 +5129,117 @@
         setStatus(`已创建交流群：${name}`, "good");
       }
 
+      function formatVoiceDuration(seconds) {
+        const total = Math.max(1, Math.round(Number(seconds) || 1));
+        const minutes = Math.floor(total / 60);
+        const rest = total % 60;
+        return minutes ? `${minutes}:${String(rest).padStart(2, "0")}` : `${rest} 秒`;
+      }
+
+      function stopVoiceTracks() {
+        if (!voiceStream) return;
+        voiceStream.getTracks().forEach((track) => track.stop());
+        voiceStream = null;
+      }
+
+      function blobToDataUrl(blob) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      async function sendGroupVoiceMessage(audioUrl, duration) {
+        const group = activeChatGroup();
+        if (!group) {
+          setStatus("请先选择或创建一个交流群。", "warning");
+          return;
+        }
+        const message = {
+          id: crypto.randomUUID(),
+          author: userProfile.nickname || currentUser?.nickname || "钓友",
+          kind: "voice",
+          text: `[语音 ${formatVoiceDuration(duration)}]`,
+          audioUrl,
+          duration,
+          createdAt: new Date().toISOString(),
+        };
+        group.messages.push(message);
+        group.messages = group.messages.slice(-80);
+        group.updatedAt = message.createdAt;
+        group.members = Array.from(new Set([...(group.members || []), message.author]));
+        persistChatGroups();
+        renderChatGroups();
+        await syncGroupMessageToBackend(group.id, message);
+        setStatus("语音消息已发送。", "good");
+      }
+
+      async function finishVoiceRecording() {
+        if (!voiceRecorder || voiceRecorder.state === "inactive") return;
+        voiceRecorder.stop();
+      }
+
+      async function toggleVoiceRecording() {
+        if (voiceRecorder && voiceRecorder.state === "recording") {
+          await finishVoiceRecording();
+          return;
+        }
+        if (!activeChatGroup()) {
+          setStatus("请先选择或创建一个交流群。", "warning");
+          return;
+        }
+        if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+          setStatus("当前浏览器不支持网页录音。请用 HTTPS 网站或手机 App 版本。", "warning");
+          return;
+        }
+        try {
+          voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          voiceChunks = [];
+          voiceStartedAt = Date.now();
+          voiceRecorder = new MediaRecorder(voiceStream);
+          voiceRecorder.addEventListener("dataavailable", (event) => {
+            if (event.data?.size) voiceChunks.push(event.data);
+          });
+          voiceRecorder.addEventListener("stop", async () => {
+            const duration = Math.max(1, (Date.now() - voiceStartedAt) / 1000);
+            stopVoiceTracks();
+            els.recordVoiceMessage.textContent = "按一下开始录音";
+            els.voiceStatus.textContent = "正在发送语音...";
+            els.voiceStatus.classList.remove("recording");
+            const mimeType = voiceRecorder?.mimeType || "audio/webm";
+            voiceRecorder = null;
+            if (!voiceChunks.length || duration < 0.8) {
+              els.voiceStatus.textContent = "录音太短，请重新录。";
+              setStatus("录音太短，请重新录。", "warning");
+              return;
+            }
+            const audioBlob = new Blob(voiceChunks, { type: mimeType });
+            if (audioBlob.size > 650000) {
+              els.voiceStatus.textContent = "语音过长，请控制在 30 秒内。";
+              setStatus("语音过长，请控制在 30 秒内。", "warning");
+              return;
+            }
+            const audioUrl = await blobToDataUrl(audioBlob);
+            await sendGroupVoiceMessage(audioUrl, duration);
+            els.voiceStatus.textContent = "可发送语音消息。";
+          });
+          voiceRecorder.start();
+          els.recordVoiceMessage.textContent = "停止并发送";
+          els.voiceStatus.textContent = "正在录音...";
+          els.voiceStatus.classList.add("recording");
+          setStatus("正在录音，点“停止并发送”即可发到群里。", "good");
+        } catch {
+          stopVoiceTracks();
+          voiceRecorder = null;
+          els.recordVoiceMessage.textContent = "按一下开始录音";
+          els.voiceStatus.textContent = "麦克风权限未开启。";
+          els.voiceStatus.classList.remove("recording");
+          setStatus("无法录音。请允许浏览器麦克风权限，并使用 HTTPS 打开网站。", "warning");
+        }
+      }
+
       async function sendGroupMessage(text = els.groupMessage.value.trim(), options = {}) {
         const group = activeChatGroup();
         if (!group) {
@@ -5097,7 +5254,10 @@
         const message = {
           id: crypto.randomUUID(),
           author: userProfile.nickname || currentUser?.nickname || "钓友",
+          kind: "text",
           text: text.slice(0, 1000),
+          audioUrl: "",
+          duration: 0,
           createdAt: new Date().toISOString(),
         };
         group.messages.push(message);
@@ -5535,6 +5695,7 @@
         if (button) selectChatGroup(button.dataset.groupId);
       });
       els.sendGroupMessage.addEventListener("click", () => sendGroupMessage());
+      els.recordVoiceMessage.addEventListener("click", toggleVoiceRecording);
       els.groupMessage.addEventListener("keydown", (event) => {
         if (event.key !== "Enter" || event.shiftKey) return;
         event.preventDefault();
