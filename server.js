@@ -105,6 +105,25 @@ function initialDb() {
       },
     ],
     photoAnalyses: [],
+    groups: [
+      {
+        id: "group-long-island-north",
+        name: "长岛北岸鱼情群",
+        description: "北岸潮汐、风向、夜钓安全和即时鱼情。",
+        owner: "1490系统",
+        members: ["我", "长岛阿明", "老王"],
+        messages: [
+          {
+            id: crypto.randomUUID(),
+            author: "1490系统",
+            text: "欢迎进群。这里可以像微信群一样发鱼情、问潮水、约钓和分享钓点。",
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ],
   };
 }
 
@@ -114,12 +133,36 @@ function normalizeDb(db) {
   db.spots = Array.isArray(db.spots) ? db.spots : [];
   db.feed = Array.isArray(db.feed) ? db.feed : [];
   db.photoAnalyses = Array.isArray(db.photoAnalyses) ? db.photoAnalyses : [];
+  db.groups = Array.isArray(db.groups) ? db.groups : [];
+  if (!db.groups.length) db.groups = initialDb().groups;
   db.users = db.users.map((user) => ({
     role: "member",
     membership: "free",
     createdAt: new Date().toISOString(),
     ...user,
   }));
+  db.groups = db.groups
+    .filter((group) => group && group.id && group.name)
+    .map((group) => ({
+      id: String(group.id),
+      name: String(group.name || "未命名交流群").slice(0, 60),
+      description: String(group.description || "").slice(0, 160),
+      owner: String(group.owner || "钓友").slice(0, 60),
+      members: Array.isArray(group.members) ? group.members.slice(0, 80).map((member) => String(member).slice(0, 60)) : [],
+      messages: Array.isArray(group.messages)
+        ? group.messages
+            .filter((message) => message && message.text)
+            .slice(-100)
+            .map((message) => ({
+              id: String(message.id || crypto.randomUUID()),
+              author: String(message.author || "钓友").slice(0, 60),
+              text: String(message.text || "").slice(0, 1000),
+              createdAt: message.createdAt || new Date().toISOString(),
+            }))
+        : [],
+      createdAt: group.createdAt || new Date().toISOString(),
+      updatedAt: group.updatedAt || group.createdAt || new Date().toISOString(),
+    }));
   return db;
 }
 
@@ -474,6 +517,85 @@ async function handleApi(req, res) {
     db.feed.push(item);
     writeDb(db);
     sendJson(res, 201, { item });
+    return;
+  }
+
+  if (req.method === "GET" && parsed.pathname === "/api/groups") {
+    sendJson(res, 200, { groups: db.groups.slice(-100).reverse() });
+    return;
+  }
+
+  if (req.method === "POST" && parsed.pathname === "/api/groups") {
+    const user = requireUser(req, res, db);
+    if (!user) return;
+    const input = await readJson(req);
+    const group = {
+      id: input.id || crypto.randomUUID(),
+      name: String(input.name || "未命名交流群").slice(0, 60),
+      description: String(input.description || "").slice(0, 160),
+      owner: user.nickname,
+      members: Array.from(new Set([user.nickname, ...(Array.isArray(input.members) ? input.members : [])])).slice(0, 80),
+      messages: Array.isArray(input.messages)
+        ? input.messages.slice(-80).map((message) => ({
+            id: message.id || crypto.randomUUID(),
+            author: String(message.author || user.nickname).slice(0, 60),
+            text: String(message.text || "").slice(0, 1000),
+            createdAt: message.createdAt || new Date().toISOString(),
+          }))
+        : [],
+      createdAt: input.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    if (!group.messages.length) {
+      group.messages.push({
+        id: crypto.randomUUID(),
+        author: user.nickname,
+        text: `创建了交流群：${group.name}`,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    db.groups = db.groups.filter((item) => item.id !== group.id).concat(group);
+    db.feed.push({
+      id: crypto.randomUUID(),
+      type: "group",
+      userId: user.id,
+      title: "创建了交流群",
+      text: `${user.nickname} · ${group.name}`,
+      createdAt: new Date().toISOString(),
+    });
+    writeDb(db);
+    sendJson(res, 201, { group });
+    return;
+  }
+
+  const groupMessageMatch = parsed.pathname.match(/^\/api\/groups\/([^/]+)\/messages$/);
+  if (req.method === "POST" && groupMessageMatch) {
+    const user = requireUser(req, res, db);
+    if (!user) return;
+    const groupId = decodeURIComponent(groupMessageMatch[1]);
+    const group = db.groups.find((item) => item.id === groupId);
+    if (!group) {
+      sendJson(res, 404, { error: "交流群不存在。" });
+      return;
+    }
+    const input = await readJson(req);
+    const message = {
+      id: input.id || crypto.randomUUID(),
+      author: user.nickname,
+      text: String(input.text || "").trim().slice(0, 1000),
+      createdAt: new Date().toISOString(),
+    };
+    if (!message.text) {
+      sendJson(res, 400, { error: "消息不能为空。" });
+      return;
+    }
+    group.messages = Array.isArray(group.messages) ? group.messages : [];
+    group.messages.push(message);
+    group.messages = group.messages.slice(-100);
+    group.members = Array.from(new Set([...(Array.isArray(group.members) ? group.members : []), user.nickname])).slice(0, 80);
+    group.updatedAt = message.createdAt;
+    writeDb(db);
+    sendJson(res, 201, { group, message });
     return;
   }
 
