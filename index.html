@@ -83,6 +83,44 @@
         gap: 7px;
       }
 
+      .sidebar-tabs {
+        position: sticky;
+        top: -18px;
+        z-index: 20;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
+        margin: -2px 0 0;
+        padding: 8px 0 10px;
+        background: var(--panel);
+        border-bottom: 1px solid #edf1f5;
+      }
+
+      .sidebar-tab {
+        min-height: 36px;
+        padding: 0 8px;
+        color: #40546c;
+        background: #f7fafc;
+        border-color: #dce5ed;
+        font-size: 13px;
+        font-weight: 820;
+      }
+
+      .sidebar-tab.active {
+        color: #ffffff;
+        background: var(--sea);
+        border-color: var(--sea);
+      }
+
+      .sidebar-panel {
+        display: none;
+        gap: 16px;
+      }
+
+      .sidebar-panel.active {
+        display: grid;
+      }
+
       h1,
       h2,
       h3,
@@ -1101,6 +1139,17 @@
           border-bottom: 1px solid var(--line);
         }
 
+        .sidebar-tabs {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          top: -18px;
+        }
+
+        .sidebar-tab {
+          min-height: 34px;
+          padding: 0 6px;
+          font-size: 12px;
+        }
+
         .row,
         .actions,
         .coord-grid,
@@ -1172,6 +1221,14 @@
           <button id="openAdminSettings" class="admin-entry" type="button">管理员入口</button>
         </section>
 
+        <nav class="sidebar-tabs" aria-label="功能分区">
+          <button class="sidebar-tab active" type="button" data-sidebar-tab="spot">钓点</button>
+          <button class="sidebar-tab" type="button" data-sidebar-tab="personal">我的</button>
+          <button class="sidebar-tab" type="button" data-sidebar-tab="community">社区</button>
+          <button class="sidebar-tab" type="button" data-sidebar-tab="account">账号</button>
+        </nav>
+
+        <div class="sidebar-panel active" data-sidebar-panel="spot">
         <section class="group">
           <h2>钓点</h2>
           <div class="field">
@@ -1189,60 +1246,30 @@
         <input id="tideStation" type="hidden" value="8516945" />
         <p id="tideStationInfo" hidden>会根据钓点自动匹配附近 NOAA 潮汐站。</p>
 
-        <section class="group auth-panel">
-          <h2>会员账号</h2>
-          <div class="auth-state" id="authState">
-            <strong>未登录</strong>
-            <span class="hint">登录后钓点、鱼情动态和鱼照识别会归到你的账号。</span>
-          </div>
-          <div class="field">
-            <label for="authEmail">邮箱</label>
-            <input id="authEmail" autocomplete="email" inputmode="email" placeholder="you@example.com" />
-          </div>
-          <div class="field">
-            <label for="authPassword">密码</label>
-            <input id="authPassword" autocomplete="current-password" placeholder="至少 6 位" type="password" />
-          </div>
-          <div class="field">
-            <label for="authNickname">注册昵称</label>
-            <input id="authNickname" autocomplete="nickname" placeholder="例如：长岛阿强" />
-          </div>
-          <div class="actions">
-            <button id="loginAccount" type="button">登录</button>
-            <button id="registerAccount" class="secondary" type="button">注册</button>
-            <button id="logoutAccount" class="secondary" type="button">退出</button>
-          </div>
-          <p class="hint">当前会员为免费账号；后续可加深度关注、订阅分成和创作者后台。</p>
-        </section>
-
         <section class="group">
-          <h2>用户与群分享</h2>
+          <h2>鱼照识别 / 规则助手</h2>
           <div class="field">
-            <label for="nickname">用户昵称</label>
-            <input id="nickname" placeholder="例如：长岛阿强" />
+            <label for="fishPhotoCamera">现场拍照</label>
+            <input id="fishPhotoCamera" accept="image/*" capture="environment" type="file" />
+          </div>
+          <div class="field">
+            <label for="fishPhotoAlbum">相册上传</label>
+            <input id="fishPhotoAlbum" accept="image/*" type="file" />
+          </div>
+          <div class="field">
+            <label for="fishPhotoHint">鱼种线索</label>
+            <input id="fishPhotoHint" placeholder="可选：例如 striped bass / fluke / porgy" />
           </div>
           <div class="actions">
-            <button id="saveProfile" type="button">保存昵称</button>
-            <button id="copyShareLink" class="secondary" type="button">复制群链接</button>
-            <button id="resetCommunity" class="secondary" type="button">重置社区</button>
+            <button id="analyzeFishPhoto" type="button">识别鱼种与规则</button>
           </div>
-          <div class="field">
-            <label for="friendName">添加好友</label>
-            <input id="friendName" placeholder="输入好友昵称，例如：小陈" />
+          <div class="golden-list" id="fishPhotoResult">
+            <p class="hint">MVP 会根据照片文件名/线索给出候选鱼种和纽约 DEC 规则链接；正式版接 AI 视觉模型。</p>
           </div>
-          <div class="actions">
-            <button id="addFriend" class="secondary" type="button">添加好友</button>
-            <button id="shareFishingNow" type="button">分享我在这里钓鱼</button>
-          </div>
-          <div class="field">
-            <label for="friendSelect">选择好友</label>
-            <select id="friendSelect"></select>
-          </div>
-          <div class="golden-list" id="friendShareList"></div>
-          <button id="importPublicSpots" class="secondary" type="button">导入公开钓点</button>
-          <p class="hint">好友分享当前为本地原型，会复制分享卡片。正式版可接站内消息、短信或微信群邀请卡。</p>
         </section>
+        </div>
 
+        <div class="sidebar-panel" data-sidebar-panel="personal">
         <section class="group">
           <h2>我的钓点</h2>
           <div class="field">
@@ -1376,27 +1403,35 @@
             <button id="saveCatch" type="button">记录钓获</button>
           </div>
         </section>
+        </div>
 
+        <div class="sidebar-panel" data-sidebar-panel="community">
         <section class="group">
-          <h2>鱼照识别 / 规则助手</h2>
+          <h2>用户与群分享</h2>
           <div class="field">
-            <label for="fishPhotoCamera">现场拍照</label>
-            <input id="fishPhotoCamera" accept="image/*" capture="environment" type="file" />
-          </div>
-          <div class="field">
-            <label for="fishPhotoAlbum">相册上传</label>
-            <input id="fishPhotoAlbum" accept="image/*" type="file" />
-          </div>
-          <div class="field">
-            <label for="fishPhotoHint">鱼种线索</label>
-            <input id="fishPhotoHint" placeholder="可选：例如 striped bass / fluke / porgy" />
+            <label for="nickname">用户昵称</label>
+            <input id="nickname" placeholder="例如：长岛阿强" />
           </div>
           <div class="actions">
-            <button id="analyzeFishPhoto" type="button">识别鱼种与规则</button>
+            <button id="saveProfile" type="button">保存昵称</button>
+            <button id="copyShareLink" class="secondary" type="button">复制群链接</button>
+            <button id="resetCommunity" class="secondary" type="button">重置社区</button>
           </div>
-          <div class="golden-list" id="fishPhotoResult">
-            <p class="hint">MVP 会根据照片文件名/线索给出候选鱼种和纽约 DEC 规则链接；正式版接 AI 视觉模型。</p>
+          <div class="field">
+            <label for="friendName">添加好友</label>
+            <input id="friendName" placeholder="输入好友昵称，例如：小陈" />
           </div>
+          <div class="actions">
+            <button id="addFriend" class="secondary" type="button">添加好友</button>
+            <button id="shareFishingNow" type="button">分享我在这里钓鱼</button>
+          </div>
+          <div class="field">
+            <label for="friendSelect">选择好友</label>
+            <select id="friendSelect"></select>
+          </div>
+          <div class="golden-list" id="friendShareList"></div>
+          <button id="importPublicSpots" class="secondary" type="button">导入公开钓点</button>
+          <p class="hint">好友分享当前为本地原型，会复制分享卡片。正式版可接站内消息、短信或微信群邀请卡。</p>
         </section>
 
         <section class="group">
@@ -1407,6 +1442,35 @@
           </div>
           <button id="postComment" type="button">发布评论</button>
         </section>
+        </div>
+
+        <div class="sidebar-panel" data-sidebar-panel="account">
+        <section class="group auth-panel">
+          <h2>会员账号</h2>
+          <div class="auth-state" id="authState">
+            <strong>未登录</strong>
+            <span class="hint">登录后钓点、鱼情动态和鱼照识别会归到你的账号。</span>
+          </div>
+          <div class="field">
+            <label for="authEmail">邮箱</label>
+            <input id="authEmail" autocomplete="email" inputmode="email" placeholder="you@example.com" />
+          </div>
+          <div class="field">
+            <label for="authPassword">密码</label>
+            <input id="authPassword" autocomplete="current-password" placeholder="至少 6 位" type="password" />
+          </div>
+          <div class="field">
+            <label for="authNickname">注册昵称</label>
+            <input id="authNickname" autocomplete="nickname" placeholder="例如：长岛阿强" />
+          </div>
+          <div class="actions">
+            <button id="loginAccount" type="button">登录</button>
+            <button id="registerAccount" class="secondary" type="button">注册</button>
+            <button id="logoutAccount" class="secondary" type="button">退出</button>
+          </div>
+          <p class="hint">当前会员为免费账号；后续可加深度关注、订阅分成和创作者后台。</p>
+        </section>
+        </div>
       </aside>
 
       <section class="map-shell" aria-label="钓点地图">
@@ -1566,6 +1630,8 @@
         openAdminSettings: document.querySelector("#openAdminSettings"),
         closeAdminSettings: document.querySelector("#closeAdminSettings"),
         adminModal: document.querySelector("#adminModal"),
+        sidebarTabs: document.querySelectorAll("[data-sidebar-tab]"),
+        sidebarPanels: document.querySelectorAll("[data-sidebar-panel]"),
         coordinateInput: document.querySelector("#coordinateInput"),
         startLat: document.querySelector("#startLat"),
         startLon: document.querySelector("#startLon"),
@@ -1891,23 +1957,39 @@
         return "免费会员";
       }
 
+      function switchSidebarPanel(panelName) {
+        els.sidebarTabs.forEach((tab) => {
+          const active = tab.dataset.sidebarTab === panelName;
+          tab.classList.toggle("active", active);
+          tab.setAttribute("aria-selected", active ? "true" : "false");
+        });
+        els.sidebarPanels.forEach((panel) => {
+          const active = panel.dataset.sidebarPanel === panelName;
+          panel.classList.toggle("active", active);
+          panel.toggleAttribute("hidden", !active);
+        });
+      }
+
       function renderAuthState() {
         if (!currentUser) {
           els.authState.innerHTML = `
             <strong>未登录</strong>
             <span class="hint">登录后钓点、鱼情动态和鱼照识别会归到你的账号。</span>`;
           els.logoutAccount.disabled = true;
+          els.openAdminSettings.hidden = true;
           els.saveProfile.textContent = "保存昵称";
           return;
         }
+        const isAdmin = currentUser.role === "admin";
         els.authState.innerHTML = `
           <strong>${escapeHtml(currentUser.nickname || "钓友")}</strong>
           <span class="hint">${escapeHtml(currentUser.email || "")}</span>
-          <span class="member-badge">${escapeHtml(membershipLabel(currentUser.membership))}</span>`;
+          <span class="member-badge">${escapeHtml(isAdmin ? "管理员" : membershipLabel(currentUser.membership))}</span>`;
         els.nickname.value = currentUser.nickname || userProfile.nickname || "我";
         els.authNickname.value = currentUser.nickname || "";
         els.authEmail.value = currentUser.email || els.authEmail.value;
         els.logoutAccount.disabled = false;
+        els.openAdminSettings.hidden = !isAdmin;
         els.saveProfile.textContent = "更新昵称";
       }
 
@@ -3708,9 +3790,22 @@
         els.tideModal.setAttribute("aria-hidden", "true");
       }
 
-      function openAdminSettings() {
-        els.adminModal.classList.add("open");
-        els.adminModal.setAttribute("aria-hidden", "false");
+      async function openAdminSettings() {
+        if (!currentUser) {
+          setStatus("请先登录管理员账号。", "warning");
+          return;
+        }
+        if (currentUser.role !== "admin") {
+          setStatus("该入口只允许管理员账号进入。", "warning");
+          return;
+        }
+        try {
+          await authRequest("/api/admin/status");
+          els.adminModal.classList.add("open");
+          els.adminModal.setAttribute("aria-hidden", "false");
+        } catch (error) {
+          setStatus(error.message || "需要管理员权限。", "warning");
+        }
       }
 
       function closeAdminSettings() {
@@ -4818,6 +4913,10 @@
       els.loadMap.addEventListener("click", initMap);
       els.fetchForecast.addEventListener("click", updateAllData);
       els.clearKeys.addEventListener("click", clearKeys);
+      els.sidebarTabs.forEach((tab) => {
+        tab.addEventListener("click", () => switchSidebarPanel(tab.dataset.sidebarTab));
+      });
+      switchSidebarPanel("spot");
       els.copyCoords.addEventListener("click", copyCoordinates);
       els.fallbackMap.addEventListener("click", selectFallbackPoint);
       els.coordinateInput.addEventListener("change", () => {

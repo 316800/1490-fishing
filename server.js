@@ -144,7 +144,7 @@ function publicUser(user) {
     id: user.id,
     email: user.email || "",
     nickname: user.nickname || "钓友",
-    role: user.role || "member",
+    role: isAdminUser(user) ? "admin" : user.role || "member",
     membership: user.membership || "free",
     createdAt: user.createdAt,
   };
@@ -152,6 +152,20 @@ function publicUser(user) {
 
 function normalizeEmail(value = "") {
   return String(value).trim().toLowerCase();
+}
+
+function configuredAdminEmails() {
+  return new Set(
+    String(process.env.ADMIN_EMAILS || "")
+      .split(",")
+      .map(normalizeEmail)
+      .filter(Boolean),
+  );
+}
+
+function isAdminUser(user) {
+  if (!user) return false;
+  return user.role === "admin" || configuredAdminEmails().has(normalizeEmail(user.email));
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -211,6 +225,16 @@ function requireUser(req, res, db) {
   const user = requestUser(req, db);
   if (!user) {
     sendJson(res, 401, { error: "请先登录。" });
+    return null;
+  }
+  return user;
+}
+
+function requireAdmin(req, res, db) {
+  const user = requireUser(req, res, db);
+  if (!user) return null;
+  if (!isAdminUser(user)) {
+    sendJson(res, 403, { error: "需要管理员权限。" });
     return null;
   }
   return user;
@@ -293,6 +317,13 @@ async function handleApi(req, res) {
     return;
   }
 
+  if (req.method === "GET" && parsed.pathname === "/api/admin/status") {
+    const user = requireAdmin(req, res, db);
+    if (!user) return;
+    sendJson(res, 200, { ok: true, user: publicUser(user) });
+    return;
+  }
+
   if (req.method === "POST" && parsed.pathname === "/api/auth/register") {
     const input = await readJson(req);
     const email = normalizeEmail(input.email);
@@ -315,7 +346,7 @@ async function handleApi(req, res) {
       id: crypto.randomUUID(),
       email,
       nickname,
-      role: "member",
+      role: configuredAdminEmails().has(email) ? "admin" : "member",
       membership: "free",
       passwordHash: passwordData.hash,
       passwordSalt: passwordData.salt,
